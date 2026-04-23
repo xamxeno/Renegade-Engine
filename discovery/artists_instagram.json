@@ -1,0 +1,79 @@
+[
+  {
+    "name": "Layfullstop",
+    "spotify_url": "https://open.spotify.com/artist/44KO1So8LqWGobs7xNCqe9",
+    "instagram": "layfullstop",
+    "instagram_url": "https://instagram.com/layfullstop",
+    "method": "spotify_direct"
+  },
+  {
+    "name": "S!MONE",
+    "spotify_url": "https://open.spotify.com/artist/10kpnvgjTMftJlxcFxHz2w",
+    "instagram": "Simonejoyjones",
+    "instagram_url": "https://instagram.com/Simonejoyjones",
+    "method": "spotify_direct"
+  },
+  {
+    "name": "Davion Farris",
+    "spotify_url": "https://open.spotify.com/artist/1fs8ZTl4T9HJ6ZHuDyU5bI",
+    "instagram": "iamdavionf",
+    "instagram_url": "https://instagram.com/iamdavionf",
+    "method": "ddg_search"
+  },
+  {
+    "name": "Soul Talk",
+    "spotify_url": "https://open.spotify.com/artist/0OHloCAVXqHyIerRBCWY9i",
+    "instagram": null,
+    "instagram_url": null,
+    "method": null
+  },
+  {
+    "name": "Sumaya Nazar",
+    "spotify_url": "https://open.spotify.com/artist/79j8kitAQDS36wAWJX59iT",
+    "instagram": "sumaya.nazar777",
+    "instagram_url": "https://instagram.com/sumaya.nazar777",
+    "method": "ddg_search"
+  },
+  {
+    "name": "Self Provoked",
+    "spotify_url": "https://open.spotify.com/artist/0cbx0hVFtnEBVGVBExW09X",
+    "instagram": "selfprovoked818",
+    "instagram_url": "https://instagram.com/selfprovoked818",
+    "method": "spotify_direct"
+  },
+  {
+    "name": "Tejy",
+    "spotify_url": "https://open.spotify.com/artist/4mOvX6YYTQ1qdtNWPS6rmk",
+    "instagram": "tejyofficial",
+    "instagram_url": "https://instagram.com/tejyofficial",
+    "method": "spotify_direct"
+  },
+  {
+    "name": "Midnightview",
+    "spotify_url": "https://open.spotify.com/artist/5gpBlvEvKCJDoIGQV16SuQ",
+    "instagram": "midnightview",
+    "instagram_url": "https://instagram.com/midnightview",
+    "method": "spotify_direct"
+  },
+  {
+    "name": "Maya Hirasedo",
+    "spotify_url": "https://open.spotify.com/artist/79fiC2Vlgb2Q8u30JVcOm8",
+    "instagram": "mayahirasedo",
+    "instagram_url": "https://instagram.com/mayahirasedo",
+    "method": "spotify_direct"
+  },
+  {
+    "name": "303",
+    "spotify_url": "https://open.spotify.com/artist/3j5f5YARSNo78Sj7lEGP2N",
+    "instagram": "theofficial303",
+    "instagram_url": "https://instagram.com/theofficial303",
+    "method": "spotify_direct"
+  },
+  {
+    "name": "Beckah Amani",
+    "spotify_url": "https://open.spotify.com/artist/6AlUh97NNEBLo3OqYORyIi",
+    "instagram": "beckahamani",
+    "instagram_url": "https://instagram.com/beckahamani",
+    "method": "spotify_direct"
+  }
+]

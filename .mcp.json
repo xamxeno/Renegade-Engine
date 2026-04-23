@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "obsidian": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "mcp-obsidian", "C:\\Renegade Engine 0.3 BETA\\Obsidian Vault\\Renegade Engine"]
+    }
+  }
+}

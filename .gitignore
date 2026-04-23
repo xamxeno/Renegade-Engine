@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# Environment variables — NEVER commit these
+.env
+.env.local
+.env.production
+backend/.env
+dashboard/.env
+discovery/.env
+
+# Build output
+dashboard/dist/
+dashboard/build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local data files (discovery output)
+discovery/leads_*.json
+discovery/test_out.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Claude Code internal
+.claude/
+enrichment chat.txt
+errors and prompt.txt
+old enrichment versions/
+{backend,discovery,dashboard/
