@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 
 const STATUS_COLORS = {
-  new:       { bg: "#1a1a2e", text: "#6c8cff" },
+  new:       { bg: "#0e1a2e", text: "#6c8cff" },
   contacted: { bg: "#1a2a1a", text: "#4caf50" },
   pitched:   { bg: "#2a1a0e", text: "#ff9800" },
   signed:    { bg: "#2a0e1a", text: "#ff4081" },
@@ -415,13 +415,17 @@ export default function Dashboard({ API, onSelect }) {
     if (!ids.length) return
     setEnrichingSelected(true)
     try {
-      await fetch(`${API}/api/enrich/batch-selected`, {
+      const r = await fetch(`${API}/api/enrich/batch-selected`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids })
       })
+      const d = await r.json()
+      // Kick off SerpAPI worker in case it was idle
+      await fetch(`${API}/api/serp/resume`, { method: 'POST' })
       clearSelection()
       fetchArtists()
+      if (d.queued) alert(`Queued ${d.queued} leads for SerpAPI enrichment. Watch the green progress bar.`)
     } catch {}
     setEnrichingSelected(false)
   }
@@ -670,13 +674,14 @@ export default function Dashboard({ API, onSelect }) {
           <span style={{ color: "#777", fontSize: 13, whiteSpace: "nowrap" }}>
             {selectedIds.size} selected · Mark as:
           </span>
-          {['contacted', 'pitched', 'signed', 'ignored'].map(s => (
+          {['new', 'contacted', 'pitched', 'signed', 'ignored'].map(s => (
             <button key={s} onClick={() => massUpdateStatus(s)} style={{
               background: STATUS_COLORS[s]?.bg || "#111",
               border: `1px solid ${STATUS_COLORS[s]?.text || '#333'}55`,
               borderRadius: 7, padding: "6px 13px",
               color: STATUS_COLORS[s]?.text || "#888",
               fontSize: 12, cursor: "pointer", fontWeight: 500, whiteSpace: "nowrap",
+              textTransform: "capitalize",
             }}>{s}</button>
           ))}
           <div style={{ width: 1, height: 22, background: "#2a2a2a", margin: "0 2px" }} />
