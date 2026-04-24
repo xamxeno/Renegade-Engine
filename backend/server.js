@@ -862,6 +862,112 @@ async function v2BatchWorker () {
   }
 }
 
+// ── SERPAPI ENRICHMENT WORKER ──────────────────────────────────────────────────
+const SERPAPI_KEY = process.env.SERPAPI_KEY || ''
+const SERP_JUNK_HANDLES = new Set(['p','explore','reel','reels','stories','tv','accounts','music','login','shoppingcart'])
+
+let _serpBusy    = false
+let _serpPaused  = false
+let _serpLimited = false  // true when monthly quota hit
+let _serpStats   = { total: 0, processed: 0, found: 0, failed: 0, current: null, limited: false }
+
+function serpSearch (artistName) {
+  return new Promise((resolve) => {
+    const q = encodeURIComponent(`${artistName} site:instagram.com`)
+    const path = `/search?engine=google&q=${q}&api_key=${SERPAPI_KEY}&num=5`
+    const req = https.get({ hostname: 'serpapi.com', path, timeout: 15000 }, res => {
+      let body = ''
+      res.on('data', c => { body += c })
+      res.on('end', () => {
+        try { resolve({ status: res.statusCode, data: JSON.parse(body) }) }
+        catch { resolve({ status: res.statusCode, data: {} }) }
+      })
+    })
+    req.on('error', () => resolve({ status: 0, data: {} }))
+    req.on('timeout', () => { req.destroy(); resolve({ status: 0, data: {} }) })
+  })
+}
+
+function extractHandle (data) {
+  const results = data.organic_results || []
+  for (const item of results) {
+    const link = item.link || ''
+    const m = link.match(/instagram\.com\/([A-Za-z0-9_.]+)/)
+    if (m) {
+      const handle = m[1].replace(/\/$/, '')
+      if (!SERP_JUNK_HANDLES.has(handle.toLowerCase())) return handle
+    }
+  }
+  return null
+}
+
+async function serpWorker () {
+  if (_serpBusy || _serpPaused || _serpLimited || !SERPAPI_KEY) return
+  _serpBusy = true
+
+  while (true) {
+    // Pick next artist with no instagram
+    const { data: artists, error } = await supabase
+      .from('artists')
+      .select('id, name, platform')
+      .is('instagram', null)
+      .not('contact_quality', 'eq', 'skip')
+      .not('contact_quality', 'eq', 'contactless')
+      .not('status', 'eq', 'ignored')
+      .order('discovered_at', { ascending: false })
+      .limit(1)
+
+    if (error || !artists?.length) break
+
+    const artist = artists[0]
+    _serpStats.current = artist.name
+    console.log(`[Serp] Searching IG for: ${artist.name}`)
+
+    const { status, data } = await serpSearch(artist.name)
+
+    // Hit monthly limit
+    if (status === 429 || data?.error?.includes?.('limit') || data?.error?.includes?.('credits')) {
+      console.log('[Serp] Monthly limit hit — pausing until reset')
+      _serpLimited = true
+      _serpStats.limited = true
+      _serpStats.current = null
+      // Retry in 24 hours
+      setTimeout(() => { _serpLimited = false; _serpStats.limited = false; if (!_serpPaused) serpWorker() }, 24 * 60 * 60 * 1000)
+      break
+    }
+
+    const handle = extractHandle(data)
+    _serpStats.processed++
+
+    if (handle) {
+      await supabase.from('artists').update({
+        instagram: handle,
+        contact_quality: 'verifying',
+        updated_at: new Date().toISOString()
+      }).eq('id', artist.id)
+      _verifyQueue.push({ id: artist.id, handle, name: artist.name })
+      _verifyStats.total++
+      if (!_verifyBusy) setTimeout(verifyWorker, 500)
+      _serpStats.found++
+      console.log(`[Serp] ✓ ${artist.name} → @${handle}`)
+    } else {
+      await supabase.from('artists').update({
+        contact_quality: 'contactless',
+        updated_at: new Date().toISOString()
+      }).eq('id', artist.id)
+      _serpStats.failed++
+      console.log(`[Serp] ✗ ${artist.name} — not found, flagged for manual scan`)
+    }
+
+    _serpStats.current = null
+    if (_serpPaused || _serpLimited) break
+    await new Promise(r => setTimeout(r, 2000))
+  }
+
+  _serpStats.current = null
+  _serpBusy = false
+}
+
 // Detect python command name once at startup
 let PYTHON_CMD = 'python'
 ;(async () => {
@@ -1143,6 +1249,28 @@ app.get('/api/verify-status', (req, res) => {
   })
 })
 
+// GET /api/serp/status
+app.get('/api/serp/status', (req, res) => {
+  res.json({ ..._serpStats, busy: _serpBusy, paused: _serpPaused, limited: _serpLimited })
+})
+
+// POST /api/serp/pause
+app.post('/api/serp/pause', (req, res) => {
+  _serpPaused = true
+  console.log('[Serp] Paused by user')
+  res.json({ success: true, paused: true })
+})
+
+// POST /api/serp/resume
+app.post('/api/serp/resume', (req, res) => {
+  _serpPaused = false
+  _serpLimited = false
+  _serpStats.limited = false
+  console.log('[Serp] Resumed by user')
+  if (!_serpBusy) serpWorker()
+  res.json({ success: true, paused: false })
+})
+
 // POST /api/sync-instagram-paste — accept JSON array, queue with instagram for IG verification
 app.post('/api/sync-instagram-paste', async (req, res) => {
   try {
@@ -1236,4 +1364,5 @@ app.listen(PORT, async () => {
   await resetStuckArtists()
   await autoFlushJunk()
   setInterval(autoFlushJunk, 3 * 60 * 1000)
+  setTimeout(serpWorker, 8000)
 })

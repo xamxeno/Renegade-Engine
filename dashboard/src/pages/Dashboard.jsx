@@ -48,6 +48,7 @@ export default function Dashboard({ API, onSelect }) {
   const [discoveryLog, setDiscoveryLog] = useState([])
   const [discoveryProgress, setDiscoveryProgress] = useState(0)
   const [verifyStatus, setVerifyStatus] = useState(null)
+  const [serpStatus, setSerpStatus] = useState(null)
 
   const searchTimer = useRef(null)
   const searchMounted = useRef(false)
@@ -254,6 +255,23 @@ export default function Dashboard({ API, onSelect }) {
         setVerifyStatus(d)
         if (prevVerifyBusy.current && !d.busy) fetchArtists()
         prevVerifyBusy.current = d.busy
+      } catch {}
+    }
+    poll()
+    const interval = setInterval(poll, 5000)
+    return () => clearInterval(interval)
+  }, [API])
+
+  // Poll SerpAPI enrichment status every 5s
+  const prevSerpBusy = useRef(false)
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const r = await fetch(`${API}/api/serp/status`)
+        const d = await r.json()
+        setSerpStatus(d)
+        if (prevSerpBusy.current && !d.busy) fetchArtists()
+        prevSerpBusy.current = d.busy
       } catch {}
     }
     poll()
@@ -785,6 +803,31 @@ export default function Dashboard({ API, onSelect }) {
       {v2Status && !v2Status.busy && v2Status.total > 0 && !v2Status.session_id && (
         <div style={{ background: "#0a0f1a", border: "0.5px solid #1a2a4a", borderRadius: 8, padding: "8px 14px", marginBottom: "0.5rem", fontSize: 12, color: "#4a6a9a", display: "flex", alignItems: "center", gap: 10 }}>
           <span>V2 scan complete — {v2Status.found}/{v2Status.total} contacts found</span>
+        </div>
+      )}
+
+      {/* ── SerpAPI Enrichment status bar ── */}
+      {serpStatus?.busy && (
+        <div style={{ background: "#0d1a0d", border: "0.5px solid #1a6a1a", borderRadius: 8, padding: "8px 14px", marginBottom: "0.5rem", fontSize: 12, color: "#44cc66", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#44cc66", display: "inline-block", animation: "pulse 1.5s infinite", flexShrink: 0 }} />
+          <span>Finding Instagram — <strong>{serpStatus.current}</strong></span>
+          <div style={{ flex: 1, minWidth: 120, background: "#0a1a0a", borderRadius: 99, height: 4, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${serpStatus.processed > 0 ? Math.min(100, Math.round((serpStatus.found / serpStatus.processed) * 100)) : 0}%`, background: "linear-gradient(90deg,#22aa44,#44cc66)", borderRadius: 99, transition: "width 0.5s ease" }} />
+          </div>
+          <span style={{ color: "#1a4a2a", whiteSpace: "nowrap" }}>
+            {serpStatus.processed} searched · {serpStatus.found} found · {serpStatus.failed} manual
+          </span>
+        </div>
+      )}
+      {serpStatus?.limited && (
+        <div style={{ background: "#1a0d00", border: "0.5px solid #6a3a00", borderRadius: 8, padding: "8px 14px", marginBottom: "0.5rem", fontSize: 12, color: "#cc8800", display: "flex", alignItems: "center", gap: 10 }}>
+          <span>⚠ SerpAPI monthly limit hit — auto-enrichment paused. Resets in 24h or</span>
+          <button onClick={() => fetch(`${API}/api/serp/resume`, { method: 'POST' })} style={{ background: "#6a3a00", color: "#ffaa00", border: "none", borderRadius: 4, padding: "2px 8px", cursor: "pointer", fontSize: 11 }}>Resume Now</button>
+        </div>
+      )}
+      {serpStatus && !serpStatus.busy && !serpStatus.limited && serpStatus.processed > 0 && (
+        <div style={{ background: "#0a140a", border: "0.5px solid #1a4a1a", borderRadius: 8, padding: "8px 14px", marginBottom: "0.5rem", fontSize: 12, color: "#2a8a44", display: "flex", alignItems: "center", gap: 10 }}>
+          <span>IG search complete — <strong style={{ color: "#44cc66" }}>{serpStatus.found} found</strong> · {serpStatus.failed} sent to manual scan</span>
         </div>
       )}
 
