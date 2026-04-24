@@ -4,7 +4,12 @@ Spotify only · Regions: USA, Canada, UK, Australia, UAE
 Runs until TARGET_LEADS new leads found — deduplicates against Supabase
 Pass --no-prompt to skip Claude scoring confirmation (used by dashboard API)
 """
-import os, json, time, re, requests, sys, io
+import sys, subprocess
+for _pkg in ['requests', 'python-dotenv']:
+    try: __import__(_pkg.replace('-', '_').split('.')[0])
+    except ImportError: subprocess.check_call([sys.executable, '-m', 'pip', 'install', _pkg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+import os, json, time, re, requests, io
 from datetime import datetime
 from base64 import b64encode
 from dotenv import load_dotenv
