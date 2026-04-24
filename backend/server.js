@@ -201,7 +201,7 @@ app.post('/api/artists/add', async (req, res) => {
   }, { onConflict: 'platform,platform_id' }).select().single()
 
   if (error) return res.status(500).json({ error: error.message })
-  if (!_enrichBusy) setTimeout(autoEnrichWorker, 100)
+  if (!_serpBusy) setTimeout(serpWorker, 100)
   res.json({ success: true, artist: data })
 })
 
@@ -640,14 +640,8 @@ app.post('/api/enrich/batch-selected', async (req, res) => {
       queued += batch.length
     }
 
-    // Push selected IDs to the front of the processing line so the worker
-    // handles THESE artists next, before any other unenriched leads.
-    for (const id of ids) {
-      if (!_priorityQueue.includes(id)) _priorityQueue.push(id)
-    }
-
-    console.log(`[BatchEnrich] Priority-queued ${queued} artists for enrichment`)
-    if (!_enrichBusy) setTimeout(autoEnrichWorker, 100)
+    console.log(`[BatchEnrich] Reset ${queued} artists — SerpAPI worker will pick them up`)
+    if (!_serpBusy) setTimeout(serpWorker, 100)
     res.json({ success: true, queued })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -674,8 +668,8 @@ app.post('/api/artists/rescan-all', async (req, res) => {
       .select('id')
     if (error) throw error
     const count = data?.length || 0
-    console.log(`[RescanAll] Reset ${count} leads for full re-enrichment`)
-    if (!_enrichBusy) setTimeout(autoEnrichWorker, 100)
+    console.log(`[RescanAll] Reset ${count} leads — SerpAPI worker will re-enrich`)
+    if (!_serpBusy) setTimeout(serpWorker, 100)
     res.json({ success: true, reset: count })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -693,7 +687,7 @@ app.post('/api/enrich/retry-contactless', async (req, res) => {
     if (error) throw error
     const count = data?.length || 0
     console.log(`[RetryContactless] Reset ${count} contactless artists for re-enrichment`)
-    if (!_enrichBusy) setTimeout(autoEnrichWorker, 100)
+    if (!_serpBusy) setTimeout(serpWorker, 100)
     res.json({ success: true, reset: count })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -702,7 +696,7 @@ app.post('/api/enrich/retry-contactless', async (req, res) => {
 
 // ── V2 BATCH SCAN WORKER ──────────────────────────────────────────────────────
 // Runs enrich_v3.py (Playwright + Claude) on a specific session batch.
-// Uses the same _enrichStats / _enrichBusy so the dashboard status bar shows progress.
+// Runs enrich_v3.py on a specific session batch.
 
 let _v2Queue  = []   // { id, name, platform, profile_url }
 let _v2Busy   = false
@@ -773,18 +767,11 @@ app.get('/api/enrich/v2-status', (req, res) => {
 })
 
 async function v2BatchWorker () {
-  if (_v2Busy || _enrichBusy) {
-    // Main worker is running — wait and retry
-    if (_enrichBusy) setTimeout(v2BatchWorker, 5000)
-    return
-  }
+  if (_v2Busy) return
   if (_v2Queue.length === 0) { _v2Busy = false; return }
 
   _v2Busy = true
   const artist = _v2Queue.shift()
-
-  _enrichStats.current   = artist.name
-  _enrichStats.remaining = _v2Queue.length
   console.log(`[V2Scan] -> ${artist.name} (${_v2Queue.length} remaining)`)
 
   try { await supabase.from('artists').update({ contact_quality: 'searching' }).eq('id', artist.id) } catch {}
@@ -850,7 +837,6 @@ async function v2BatchWorker () {
     py.on('error', err => { clearTimeout(killTimer); console.error(`[V2Scan] Spawn error: ${err.message}`); done() })
   })
 
-  _enrichStats.current = null
   _v2Busy = false
 
   if (_v2Queue.length > 0) {
