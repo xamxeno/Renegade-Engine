@@ -83,12 +83,10 @@ async function verifyWorker () {
       const updates = { updated_at: new Date().toISOString() }
       if (followers !== null) updates.ig_followers = followers
 
+      // Instagram blocks most plain fetches — if we got nothing, trust the manually-pasted handle
       if (!html || html.length < 500) {
-        quality = 'contactless'
-        console.log(`[Verify] ${name} — IG page not accessible`)
-      } else if (followers !== null && followers < 100) {
-        quality = 'contactless'
-        console.log(`[Verify] ${name} — too few followers (${followers})`)
+        quality = 'verified'
+        console.log(`[Verify] ${name} @${handle} — IG blocked, trusting manual handle`)
       } else if (followers !== null && followers > 500000) {
         quality = 'skip'
         console.log(`[Verify] ${name} — too large (${followers.toLocaleString()} followers)`)
@@ -909,6 +907,7 @@ async function autoFlushJunk () {
       .from('artists')
       .select('id, name, followers, ig_followers, listeners')
       .eq('status', 'new')
+      .neq('contact_quality', 'skip')
       .or('followers.gt.100000,ig_followers.gt.100000,listeners.gt.100000')
     if (!error && data?.length) {
       await flagIds(data.map(t => t.id), `established artists (100K+): ${data.map(t => t.name).join(', ')}`)
