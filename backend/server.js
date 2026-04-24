@@ -943,6 +943,27 @@ async function autoFlushJunk () {
     console.error('[AutoFlush] Region flush error:', err.message)
   }
 
+  // 3. Flag producer names
+  const PRODUCER_NAME_PATTERNS = [
+    'prod.', 'prod by', 'prodby', 'prod_by', 'beatz', 'beatmaker', 'beat maker',
+    'type beat', 'on the beat', 'the producer', 'tha producer', 'producer',
+  ]
+  try {
+    const { data, error } = await supabase
+      .from('artists')
+      .select('id, name')
+      .eq('status', 'new')
+      .neq('contact_quality', 'skip')
+    if (!error && data?.length) {
+      const producerIds = data
+        .filter(a => PRODUCER_NAME_PATTERNS.some(p => a.name.toLowerCase().includes(p)))
+        .map(a => a.id)
+      if (producerIds.length) await flagIds(producerIds, `producer-named artists`)
+    }
+  } catch (err) {
+    console.error('[AutoFlush] Producer name flush error:', err.message)
+  }
+
 }
 
 // POST /api/enrich/:id — run reverse search for one artist from the dashboard
