@@ -472,9 +472,11 @@ export default function Dashboard({ API, onSelect }) {
     batchLabelMap[s.session_id] = isOldest ? "Testing" : `Batch ${sessions.length - i}`
   })
 
-  const verifiedArtists = sortedArtists.filter(a => a.contact_quality === 'verified')
-  const displayedArtists =
-    activeTab === "verified" ? verifiedArtists :
+  const verifiedArtists   = sortedArtists.filter(a => a.contact_quality === 'verified')
+  const inProgressArtists = sortedArtists.filter(a => a.contact_quality === 'verifying')
+  const displayedArtists  =
+    activeTab === "verified"    ? verifiedArtists :
+    activeTab === "inprogress"  ? inProgressArtists :
     sortedArtists
 
   return (
@@ -891,8 +893,9 @@ export default function Dashboard({ API, onSelect }) {
       {/* ── Tabs ── */}
       <div style={{ display: "flex", gap: 4, marginBottom: "1rem", borderBottom: "0.5px solid #1f1f1f", paddingBottom: 0, flexWrap: "wrap" }}>
         {[
-          ["all",      "All Leads",         sortedArtists.length],
-          ["verified", "Verified Contacts", verifiedArtists.length],
+          ["all",         "All Leads",         sortedArtists.length],
+          ["verified",    "Verified Contacts", verifiedArtists.length],
+          ["inprogress",  "In Progress",        inProgressArtists.length],
         ].map(([tab, label, count]) => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
             background: "transparent", border: "none",

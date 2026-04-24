@@ -701,7 +701,7 @@ app.post('/api/enrich/retry-contactless', async (req, res) => {
 })
 
 // ── V2 BATCH SCAN WORKER ──────────────────────────────────────────────────────
-// Runs enrich_v2.py (Playwright + Claude) on a specific session batch.
+// Runs enrich_v3.py (Playwright + Claude) on a specific session batch.
 // Uses the same _enrichStats / _enrichBusy so the dashboard status bar shows progress.
 
 let _v2Queue  = []   // { id, name, platform, profile_url }
@@ -789,7 +789,7 @@ async function v2BatchWorker () {
 
   try { await supabase.from('artists').update({ contact_quality: 'searching' }).eq('id', artist.id) } catch {}
 
-  const v2Path = path.join(__dirname, '../discovery/enrich_v2.py')
+  const v2Path = path.join(__dirname, '../discovery/enrich_v3.py')
   const args   = [v2Path, '--json', '--name', artist.name, '--platform', artist.platform]
   if (artist.profile_url) args.push('--profile-url', artist.profile_url)
 
@@ -1086,7 +1086,7 @@ app.post('/api/enrich/:id', async (req, res) => {
       return res.json({ success: false, error: 'Already being searched by background worker — check back in a moment' })
     }
 
-    const v2Path = path.join(__dirname, '../discovery/enrich_v2.py')
+    const v2Path = path.join(__dirname, '../discovery/enrich_v3.py')
     const args = [
       v2Path, '--json',
       '--name', artist.name,
@@ -1118,7 +1118,7 @@ app.post('/api/enrich/:id', async (req, res) => {
         try { result = JSON.parse(line.trim()); break } catch {}
       }
       if (!result) {
-        console.error('enrich_v2.py stderr:', stderr.slice(0, 500))
+        console.error('enrich_v3.py stderr:', stderr.slice(0, 500))
         return res.status(500).json({ error: 'Could not parse enrichment result', stderr: stderr.slice(0, 200) })
       }
 
