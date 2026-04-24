@@ -14,7 +14,7 @@ export default function Dashboard({ API, onSelect }) {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [filterStatus, setFilterStatus] = useState("")
-  const [filterPlatform, setFilterPlatform] = useState("spotify")
+  const [filterPlatform, setFilterPlatform] = useState("")
   const [minScore, setMinScore] = useState(0)
   const [sweetSpot, setSweetSpot] = useState(false)
   const [sortBy, setSortBy] = useState("listeners")
