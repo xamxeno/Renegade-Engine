@@ -926,9 +926,11 @@ async function autoEnrichWorker () {
           updated_at:   new Date().toISOString()
         }
         if (updates.instagram) {
-          // Inline IG verification — check followers + producer bio before marking verified
           console.log(`[Enrich] Verifying @${updates.instagram} for ${artist.name}...`)
-          const igHtml = await fetchIGPage(updates.instagram)
+          const igHtml = await Promise.race([
+            fetchIGPage(updates.instagram),
+            new Promise(r => setTimeout(() => r(''), 15000))
+          ])
           const { followers, bio } = parseIGPage(igHtml)
 
           if (followers !== null) updates.ig_followers = followers
