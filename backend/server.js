@@ -1000,7 +1000,12 @@ async function _recheckViaResolve (artist) {
       for (const line of stdout.split('\n').reverse()) {
         try { result = JSON.parse(line.trim()); break } catch {}
       }
-      if (!result) { done(); return }
+      if (!result) {
+        // resolve.py unavailable or returned nothing — stamp ig_followers=-1 so this artist
+        // doesn't get picked up again by the null-ig_followers recheck query
+        await supabase.from('artists').update({ ig_followers: -1 }).eq('id', artist.id)
+        done(); return
+      }
 
       if (result.skip || (result.ig_followers && result.ig_followers > 100000)) {
         const reason = result.skip_reason || `${result.ig_followers?.toLocaleString()} IG followers`
