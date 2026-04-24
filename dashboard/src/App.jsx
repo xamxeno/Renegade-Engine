@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import Dashboard from "./pages/Dashboard"
 import ArtistDetail from "./pages/ArtistDetail"
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:4000"
+const API = (import.meta.env.VITE_API_URL || "http://localhost:4000").replace(/\/$/, "")
 
 export default function App() {
   const [page, setPage] = useState("dashboard")
