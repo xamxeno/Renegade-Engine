@@ -3,7 +3,7 @@ services:
     name: renegade-backend
     runtime: node
     rootDir: backend
-    buildCommand: npm install
+    buildCommand: npm install && pip install -r ../discovery/requirements.txt
     startCommand: node server.js
     envVars:
       - key: PORT
