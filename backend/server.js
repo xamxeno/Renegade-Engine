@@ -1013,7 +1013,7 @@ async function autoFlushJunk () {
       .from('artists')
       .select('id, name, followers, ig_followers, listeners')
       .eq('status', 'new')
-      .neq('contact_quality', 'skip')
+      .not('contact_quality', 'in', '("skip","verified","verifying")')
       .or('followers.gt.100000,ig_followers.gt.100000,listeners.gt.100000')
     if (!error && data?.length) {
       await flagIds(data.map(t => t.id), `established artists (100K+): ${data.map(t => t.name).join(', ')}`)
@@ -1034,6 +1034,7 @@ async function autoFlushJunk () {
       .from('artists')
       .select('id, name, needs, genres')
       .eq('status', 'new')
+      .not('contact_quality', 'in', '("skip","verified","verifying")')
     if (!error && allNew?.length) {
       const blockedIds = allNew
         .filter(a => {
@@ -1059,7 +1060,7 @@ async function autoFlushJunk () {
       .from('artists')
       .select('id, name')
       .eq('status', 'new')
-      .neq('contact_quality', 'skip')
+      .not('contact_quality', 'in', '("skip","verified","verifying")')
     if (!error && data?.length) {
       const producerIds = data
         .filter(a => PRODUCER_NAME_PATTERNS.some(p => a.name.toLowerCase().includes(p)))
