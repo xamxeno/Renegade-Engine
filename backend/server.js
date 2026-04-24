@@ -1007,18 +1007,15 @@ async function resetStuckArtists () {
     console.log(`[Enrich] Reset ${stuckSearching.length} stuck 'searching' leads to 'none'`)
   }
 
-  // Re-queue any artists stuck in 'verifying' state from a previous crashed run
-  const { data: stuck } = await supabase
+  // Reset any leads stuck in 'verifying' — enrich worker will re-process them fresh
+  const { data: stuckVerifying } = await supabase
     .from('artists')
-    .select('id, name, instagram')
+    .select('id')
     .eq('contact_quality', 'verifying')
-  if (stuck?.length) {
-    for (const a of stuck) {
-      if (a.instagram) _verifyQueue.push({ id: a.id, handle: a.instagram, name: a.name })
-    }
-    _verifyStats.total += stuck.length
-    console.log(`[Verify] Re-queued ${stuck.length} stuck verifying leads`)
-    setTimeout(verifyWorker, 3000)
+  if (stuckVerifying?.length) {
+    await supabase.from('artists').update({ contact_quality: 'none', updated_at: new Date().toISOString() })
+      .in('id', stuckVerifying.map(a => a.id))
+    console.log(`[Enrich] Reset ${stuckVerifying.length} stuck 'verifying' leads to 'none'`)
   }
 }
 

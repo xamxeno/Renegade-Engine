@@ -778,22 +778,14 @@ export default function Dashboard({ API, onSelect }) {
         </div>
       )}
 
-      {/* ── IG Verification status bar ── */}
-      {verifyStatus?.busy && (
+      {/* ── IG Verification status bar (paste sync only) ── */}
+      {verifyStatus?.busy && verifyStatus.queue > 0 && (
         <div style={{ background: "#0d0d1a", border: "0.5px solid #3a1a6a", borderRadius: 8, padding: "8px 14px", marginBottom: "0.5rem", fontSize: 12, color: "#aa66ff", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#aa66ff", display: "inline-block", animation: "pulse 1.5s infinite", flexShrink: 0 }} />
           <span>Verifying <strong>{verifyStatus.current}</strong></span>
-          <div style={{ flex: 1, minWidth: 120, background: "#1a1a2a", borderRadius: 99, height: 4, overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${verifyStatus.total > 0 ? Math.round((verifyStatus.processed / verifyStatus.total) * 100) : 0}%`, background: "linear-gradient(90deg,#6633ff,#aa66ff)", borderRadius: 99, transition: "width 0.5s ease" }} />
-          </div>
-          <span style={{ color: "#3a2a6a", whiteSpace: "nowrap" }}>
-            {verifyStatus.processed}/{verifyStatus.total} · {verifyStatus.verified} verified · {verifyStatus.flagged} flagged
+          <span style={{ color: "#3a2a6a", marginLeft: "auto", whiteSpace: "nowrap" }}>
+            {verifyStatus.processed}/{verifyStatus.total} · {verifyStatus.verified} verified
           </span>
-        </div>
-      )}
-      {verifyStatus && !verifyStatus.busy && verifyStatus.total > 0 && (
-        <div style={{ background: "#0a0a14", border: "0.5px solid #2a1a4a", borderRadius: 8, padding: "8px 14px", marginBottom: "0.5rem", fontSize: 12, color: "#6644aa", display: "flex", alignItems: "center", gap: 10 }}>
-          <span>IG verification complete — <strong style={{ color: "#aa66ff" }}>{verifyStatus.verified} verified</strong> · {verifyStatus.flagged} flagged as producers/junk</span>
         </div>
       )}
 
