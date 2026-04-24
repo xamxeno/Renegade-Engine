@@ -921,8 +921,7 @@ async function autoFlushJunk () {
     const BLOCKED_REGION_SIGNALS = [
       'pakistan','pakistani','india','indian','hindi','urdu','bollywood',
       'karachi','lahore','islamabad','mumbai','delhi','kolkata','rawalpindi',
-      'nigeria','nigerian','ghana','ghanaian','lagos','abuja','accra',
-      'indonesia','indonesian','philippines','filipino','brazil','brazilian',
+      'indonesia','indonesian','philippines','filipino',
       'mexico','mexican','korea','korean','japan','japanese','china','chinese',
     ]
     const { data: allNew, error } = await supabase

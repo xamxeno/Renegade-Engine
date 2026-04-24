@@ -38,11 +38,11 @@ BLOCKED_REGIONS = [
     "india","indian","pakistan","pakistani","hindi","bollywood",
     "bhangra","desi","bangladesh","bengali","urdu","karachi","lahore",
     "islamabad","mumbai","delhi","kolkata","rawalpindi","hyderabad",
-    "nigeria","nigerian","ghana","ghanaian","kenya","ethiopia",
+    "kenya","ethiopia",
     "tanzania","south africa","afrobeats","afropop","amapiano",
     "indonesia","indonesian","philippines","filipino","malaysia","malay",
     "japan","japanese","korea","korean","china","chinese","vietnam","vietnamese",
-    "brazil","brazilian","mexico","mexican","colombia","colombian",
+    "mexico","mexican","colombia","colombian",
     "reggaeton","latin trap","latin pop",
 ]
 
