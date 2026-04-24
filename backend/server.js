@@ -201,7 +201,7 @@ app.post('/api/artists/add', async (req, res) => {
   }, { onConflict: 'platform,platform_id' }).select().single()
 
   if (error) return res.status(500).json({ error: error.message })
-  if (!_serpBusy) setTimeout(serpWorker, 100)
+  if (!_enrichBusy) setTimeout(autoEnrichWorker, 100)
   res.json({ success: true, artist: data })
 })
 
@@ -640,8 +640,8 @@ app.post('/api/enrich/batch-selected', async (req, res) => {
       queued += batch.length
     }
 
-    console.log(`[BatchEnrich] Reset ${queued} artists — SerpAPI worker will pick them up`)
-    if (!_serpBusy) setTimeout(serpWorker, 100)
+    console.log(`[BatchEnrich] Reset ${queued} artists — enrich worker will pick them up`)
+    if (!_enrichBusy) setTimeout(autoEnrichWorker, 100)
     res.json({ success: true, queued })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -668,8 +668,8 @@ app.post('/api/artists/rescan-all', async (req, res) => {
       .select('id')
     if (error) throw error
     const count = data?.length || 0
-    console.log(`[RescanAll] Reset ${count} leads — SerpAPI worker will re-enrich`)
-    if (!_serpBusy) setTimeout(serpWorker, 100)
+    console.log(`[RescanAll] Reset ${count} leads — enrich worker will re-enrich`)
+    if (!_enrichBusy) setTimeout(autoEnrichWorker, 100)
     res.json({ success: true, reset: count })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -687,7 +687,7 @@ app.post('/api/enrich/retry-contactless', async (req, res) => {
     if (error) throw error
     const count = data?.length || 0
     console.log(`[RetryContactless] Reset ${count} contactless artists for re-enrichment`)
-    if (!_serpBusy) setTimeout(serpWorker, 100)
+    if (!_enrichBusy) setTimeout(autoEnrichWorker, 100)
     res.json({ success: true, reset: count })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -848,110 +848,138 @@ async function v2BatchWorker () {
   }
 }
 
-// ── SERPAPI ENRICHMENT WORKER ──────────────────────────────────────────────────
-const SERPAPI_KEY = process.env.SERPAPI_KEY || ''
-const SERP_JUNK_HANDLES = new Set(['p','explore','reel','reels','stories','tv','accounts','music','login','shoppingcart'])
+// ── AUTO ENRICH WORKER ────────────────────────────────────────────────────────
+// Picks up leads with contact_quality='none'/null and runs enrich_v3.py on them.
 
-let _serpBusy    = false
-let _serpPaused  = false
-let _serpLimited = false  // true when monthly quota hit
-let _serpStats   = { total: 0, processed: 0, found: 0, failed: 0, current: null, limited: false }
+let _enrichBusy  = false
+let _enrichStats = { total: 0, processed: 0, found: 0, current: null, remaining: 0 }
 
-function serpSearch (artistName) {
-  return new Promise((resolve) => {
-    const q = encodeURIComponent(`${artistName} site:instagram.com`)
-    const path = `/search?engine=google&q=${q}&api_key=${SERPAPI_KEY}&num=5`
-    const req = https.get({ hostname: 'serpapi.com', path, timeout: 15000 }, res => {
-      let body = ''
-      res.on('data', c => { body += c })
-      res.on('end', () => {
-        try { resolve({ status: res.statusCode, data: JSON.parse(body) }) }
-        catch { resolve({ status: res.statusCode, data: {} }) }
-      })
-    })
-    req.on('error', () => resolve({ status: 0, data: {} }))
-    req.on('timeout', () => { req.destroy(); resolve({ status: 0, data: {} }) })
-  })
-}
-
-function extractHandle (data) {
-  const results = data.organic_results || []
-  for (const item of results) {
-    const link = item.link || ''
-    const m = link.match(/instagram\.com\/([A-Za-z0-9_.]+)/)
-    if (m) {
-      const handle = m[1].replace(/\/$/, '')
-      if (!SERP_JUNK_HANDLES.has(handle.toLowerCase())) return handle
-    }
-  }
-  return null
-}
-
-async function serpWorker () {
-  if (_serpBusy || _serpPaused || _serpLimited || !SERPAPI_KEY) return
-  _serpBusy = true
+async function autoEnrichWorker () {
+  if (_enrichBusy) return
+  _enrichBusy = true
 
   while (true) {
-    // Pick next artist with no instagram
-    const { data: artists, error } = await supabase
+    const { data: candidates, error } = await supabase
       .from('artists')
-      .select('id, name, platform')
-      .is('instagram', null)
-      .not('contact_quality', 'eq', 'skip')
-      .not('contact_quality', 'eq', 'contactless')
+      .select('id, name, platform, profile_url')
+      .or('contact_quality.is.null,contact_quality.eq.none')
       .not('status', 'eq', 'ignored')
       .order('discovered_at', { ascending: false })
       .limit(1)
 
-    if (error || !artists?.length) break
+    if (error || !candidates?.length) break
 
-    const artist = artists[0]
-    _serpStats.current = artist.name
-    console.log(`[Serp] Searching IG for: ${artist.name}`)
+    const artist = candidates[0]
+    _enrichStats.current = artist.name
 
-    const { status, data } = await serpSearch(artist.name)
+    // Count remaining for status reporting
+    const { count } = await supabase
+      .from('artists')
+      .select('id', { count: 'exact', head: true })
+      .or('contact_quality.is.null,contact_quality.eq.none')
+      .not('status', 'eq', 'ignored')
+    _enrichStats.remaining = count || 0
 
-    // Hit monthly limit
-    if (status === 429 || data?.error?.includes?.('limit') || data?.error?.includes?.('credits')) {
-      console.log('[Serp] Monthly limit hit — pausing until reset')
-      _serpLimited = true
-      _serpStats.limited = true
-      _serpStats.current = null
-      // Retry in 24 hours
-      setTimeout(() => { _serpLimited = false; _serpStats.limited = false; if (!_serpPaused) serpWorker() }, 24 * 60 * 60 * 1000)
-      break
-    }
+    console.log(`[Enrich] -> ${artist.name} (${_enrichStats.remaining} remaining)`)
+    await supabase.from('artists').update({ contact_quality: 'searching', updated_at: new Date().toISOString() }).eq('id', artist.id)
 
-    const handle = extractHandle(data)
-    _serpStats.processed++
+    const v3Path = path.join(__dirname, '../discovery/enrich_v3.py')
+    const args = [v3Path, '--json', '--name', artist.name, '--platform', artist.platform || 'spotify']
+    if (artist.profile_url) args.push('--profile-url', artist.profile_url)
 
-    if (handle) {
-      await supabase.from('artists').update({
-        instagram: handle,
-        contact_quality: 'verifying',
-        updated_at: new Date().toISOString()
-      }).eq('id', artist.id)
-      _verifyQueue.push({ id: artist.id, handle, name: artist.name })
-      _verifyStats.total++
-      if (!_verifyBusy) setTimeout(verifyWorker, 500)
-      _serpStats.found++
-      console.log(`[Serp] ✓ ${artist.name} → @${handle}`)
-    } else {
-      await supabase.from('artists').update({
-        contact_quality: 'contactless',
-        updated_at: new Date().toISOString()
-      }).eq('id', artist.id)
-      _serpStats.failed++
-      console.log(`[Serp] ✗ ${artist.name} — not found, flagged for manual scan`)
-    }
+    await new Promise((done) => {
+      const py = spawn(PYTHON_CMD, args)
+      let stdout = '', stderr = ''
+      const killTimer = setTimeout(() => { py.kill() }, 120000)
 
-    _serpStats.current = null
-    if (_serpPaused || _serpLimited) break
+      py.stdout.on('data', d => { stdout += d })
+      py.stderr.on('data', d => {
+        stderr += d
+        d.toString().split('\n').filter(l => l.trim()).forEach(l => console.log(`  [enrich_v3] ${l}`))
+      })
+
+      py.on('close', async () => {
+        clearTimeout(killTimer)
+        _enrichStats.processed++
+
+        let result = null
+        for (const line of stdout.split('\n').reverse()) {
+          try { result = JSON.parse(line.trim()); break } catch {}
+        }
+
+        if (!result) {
+          console.error(`[Enrich] Parse failed for ${artist.name}`)
+          await supabase.from('artists').update({ contact_quality: 'contactless', updated_at: new Date().toISOString() }).eq('id', artist.id)
+          done(); return
+        }
+
+        if (result.skip) {
+          console.log(`[Enrich] Flag ${artist.name}: ${result.skip_reason}`)
+          await supabase.from('artists').update({ contact_quality: 'skip', updated_at: new Date().toISOString() }).eq('id', artist.id)
+          done(); return
+        }
+
+        const updates = {
+          instagram:    result.instagram    || null,
+          email:        result.email        || null,
+          ig_followers: result.ig_followers || null,
+          updated_at:   new Date().toISOString()
+        }
+        if (updates.instagram) {
+          // Inline IG verification — check followers + producer bio before marking verified
+          console.log(`[Enrich] Verifying @${updates.instagram} for ${artist.name}...`)
+          const igHtml = await fetchIGPage(updates.instagram)
+          const { followers, bio } = parseIGPage(igHtml)
+
+          if (followers !== null) updates.ig_followers = followers
+
+          if (!igHtml || igHtml.length < 500) {
+            // IG blocked — trust the found handle
+            updates.contact_quality = 'verified'
+            console.log(`[Enrich] ✓ ${artist.name} → @${updates.instagram} (IG blocked, trusted)`)
+          } else if (followers !== null && followers > 500000) {
+            updates.contact_quality = 'skip'
+            console.log(`[Enrich] Flag ${artist.name} — IG too large (${followers.toLocaleString()} followers)`)
+          } else if (bio && IG_PRODUCER_KEYWORDS.some(kw => bio.includes(kw))) {
+            updates.contact_quality = 'skip'
+            console.log(`[Enrich] Flag ${artist.name} — producer detected in IG bio`)
+          } else {
+            updates.contact_quality = 'verified'
+            _enrichStats.found++
+            console.log(`[Enrich] ✓ ${artist.name} → @${updates.instagram} (${followers?.toLocaleString() ?? '?'} followers)`)
+          }
+        } else if (updates.email) {
+          updates.contact_quality = 'email_only'
+          console.log(`[Enrich] ✓ ${artist.name} — email only`)
+        } else {
+          updates.contact_quality = 'contactless'
+          console.log(`[Enrich] ✗ ${artist.name} — no contact found`)
+        }
+
+        await supabase.from('artists').update(updates).eq('id', artist.id)
+        done()
+      })
+
+      py.on('error', async (err) => {
+        clearTimeout(killTimer)
+        console.error(`[Enrich] Spawn error for ${artist.name}: ${err.message}`)
+        await supabase.from('artists').update({ contact_quality: 'contactless', updated_at: new Date().toISOString() }).eq('id', artist.id)
+        _enrichStats.processed++
+        done()
+      })
+    })
+
+    _enrichStats.current = null
+    // Small gap between artists to avoid rate limits
     await new Promise(r => setTimeout(r, 2000))
   }
 
-  _serpStats.current = null
-  _serpBusy = false
+  _enrichStats.current = null
+  _enrichStats.remaining = 0
+  _enrichBusy = false
+
+  // Re-check in 10 minutes in case new leads were added
+  setTimeout(() => { if (!_enrichBusy) autoEnrichWorker() }, 10 * 60 * 1000)
 }
 
 // Detect python command name once at startup
@@ -968,6 +996,16 @@ let PYTHON_CMD = 'python'
 })()
 
 async function resetStuckArtists () {
+  // Reset artists stuck in 'searching' from a crashed enrich worker
+  const { data: stuckSearching } = await supabase
+    .from('artists')
+    .select('id')
+    .eq('contact_quality', 'searching')
+  if (stuckSearching?.length) {
+    await supabase.from('artists').update({ contact_quality: 'none', updated_at: new Date().toISOString() })
+      .in('id', stuckSearching.map(a => a.id))
+    console.log(`[Enrich] Reset ${stuckSearching.length} stuck 'searching' leads to 'none'`)
+  }
 
   // Re-queue any artists stuck in 'verifying' state from a previous crashed run
   const { data: stuck } = await supabase
@@ -1236,26 +1274,9 @@ app.get('/api/verify-status', (req, res) => {
   })
 })
 
-// GET /api/serp/status
-app.get('/api/serp/status', (req, res) => {
-  res.json({ ..._serpStats, busy: _serpBusy, paused: _serpPaused, limited: _serpLimited })
-})
-
-// POST /api/serp/pause
-app.post('/api/serp/pause', (req, res) => {
-  _serpPaused = true
-  console.log('[Serp] Paused by user')
-  res.json({ success: true, paused: true })
-})
-
-// POST /api/serp/resume
-app.post('/api/serp/resume', (req, res) => {
-  _serpPaused = false
-  _serpLimited = false
-  _serpStats.limited = false
-  console.log('[Serp] Resumed by user')
-  if (!_serpBusy) serpWorker()
-  res.json({ success: true, paused: false })
+// GET /api/enrich/status — background worker progress
+app.get('/api/enrich/status', (req, res) => {
+  res.json({ busy: _enrichBusy, ..._enrichStats })
 })
 
 // POST /api/sync-instagram-paste — accept JSON array, queue with instagram for IG verification
@@ -1351,5 +1372,5 @@ app.listen(PORT, async () => {
   await resetStuckArtists()
   await autoFlushJunk()
   setInterval(autoFlushJunk, 3 * 60 * 1000)
-  setTimeout(serpWorker, 8000)
+  setTimeout(autoEnrichWorker, 8000)
 })
