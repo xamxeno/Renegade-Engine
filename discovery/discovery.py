@@ -73,9 +73,17 @@ JUNK_KEYWORDS = [
     "music network","music community","sound healing","music therapy",
 ]
 
+PRODUCER_NAME_PATTERNS = [
+    "prod.", "prod by", "prodby", "prod_by", "xproducer", "beatz",
+    "tha producer", "the producer", "on the beat", "type beat",
+    "producer", "beatmaker", "beat maker",
+]
+
 def is_junk(name):
     n = name.lower()
     if any(kw in n for kw in JUNK_KEYWORDS):
+        return True
+    if any(p in n for p in PRODUCER_NAME_PATTERNS):
         return True
     if len(name.split()) > 5:
         return True
