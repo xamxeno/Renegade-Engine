@@ -919,7 +919,7 @@ async function autoFlushJunk () {
   // 1b. Flag blocked-region artists
   try {
     const BLOCKED_REGION_SIGNALS = [
-      'pakistan','pakistani','india','indian','punjabi','hindi','urdu','bollywood',
+      'pakistan','pakistani','india','indian','hindi','urdu','bollywood',
       'karachi','lahore','islamabad','mumbai','delhi','kolkata','rawalpindi',
       'nigeria','nigerian','ghana','ghanaian','lagos','abuja','accra',
       'indonesia','indonesian','philippines','filipino','brazil','brazilian',

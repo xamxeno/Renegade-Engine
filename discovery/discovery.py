@@ -35,7 +35,7 @@ MIN_SCORE     = 60          # minimum Claude score to keep
 
 # ── BLOCKED REGIONS ────────────────────────────────────────────────────────────
 BLOCKED_REGIONS = [
-    "india","indian","pakistan","pakistani","punjabi","hindi","bollywood",
+    "india","indian","pakistan","pakistani","hindi","bollywood",
     "bhangra","desi","bangladesh","bengali","urdu","karachi","lahore",
     "islamabad","mumbai","delhi","kolkata","rawalpindi","hyderabad",
     "nigeria","nigerian","ghana","ghanaian","kenya","ethiopia",
