@@ -458,9 +458,11 @@ export default function Dashboard({ API, onSelect }) {
   })
 
   const verifiedArtists   = sortedArtists.filter(a => a.contact_quality === 'verified' || a.contact_quality === 'found')
+  const unverifiedArtists = sortedArtists.filter(a => !a.contact_quality || a.contact_quality === 'none' || a.contact_quality === 'searching')
   const inProgressArtists = sortedArtists.filter(a => a.contact_quality === 'verifying' && a.instagram)
   const displayedArtists  =
     activeTab === "verified"    ? verifiedArtists :
+    activeTab === "unverified"  ? unverifiedArtists :
     activeTab === "inprogress"  ? inProgressArtists :
     sortedArtists
 
@@ -843,8 +845,9 @@ export default function Dashboard({ API, onSelect }) {
       {/* ── Tabs ── */}
       <div style={{ display: "flex", gap: 4, marginBottom: "1rem", borderBottom: "0.5px solid #1f1f1f", paddingBottom: 0, flexWrap: "wrap" }}>
         {[
-          ["all",         "All Leads",         sortedArtists.length],
-          ["verified",    "Verified Contacts", verifiedArtists.length],
+          ["all",         "All Leads",          sortedArtists.length],
+          ["verified",    "Verified Contacts",  verifiedArtists.length],
+          ["unverified",  "Unverified",         unverifiedArtists.length],
           ["inprogress",  "In Progress",        inProgressArtists.length],
         ].map(([tab, label, count]) => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
