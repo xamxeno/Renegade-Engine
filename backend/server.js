@@ -142,8 +142,6 @@ app.get('/api/artists', async (req, res) => {
       // Also cap by monthly listeners when the column is populated (new records).
       // Old records (listeners=null) pass through; followers cap above catches them.
       .or(`listeners.is.null,listeners.lte.${followerCap}`)
-      // Exclude flagged leads — they only appear in Flush Junk preview
-      .or('contact_quality.neq.skip,contact_quality.is.null')
 
     if (status)     query = query.eq('status', status)
     if (min_score !== undefined && min_score !== '' && parseInt(min_score) > 0)

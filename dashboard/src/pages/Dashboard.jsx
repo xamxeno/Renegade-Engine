@@ -323,8 +323,9 @@ export default function Dashboard({ API, onSelect }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids, action: 'delete' })
       })
+      const flaggedSet = new Set(ids)
+      setArtists(prev => prev.filter(a => !flaggedSet.has(a.id)))
       clearSelection()
-      fetchArtists()
     } catch {}
   }
 
