@@ -458,7 +458,7 @@ export default function Dashboard({ API, onSelect }) {
   })
 
   const verifiedArtists   = sortedArtists.filter(a => a.contact_quality === 'verified' || a.contact_quality === 'found')
-  const unverifiedArtists = sortedArtists.filter(a => !a.contact_quality || a.contact_quality === 'none' || a.contact_quality === 'searching')
+  const unverifiedArtists = sortedArtists.filter(a => a.contact_quality !== 'verified' && a.contact_quality !== 'found')
   const inProgressArtists = sortedArtists.filter(a => a.contact_quality === 'verifying' && a.instagram)
   const displayedArtists  =
     activeTab === "verified"    ? verifiedArtists :
