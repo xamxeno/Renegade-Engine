@@ -107,7 +107,7 @@ export default function Dashboard({ API, onSelect }) {
       .then(d => {
         const all = d.artists || []
         // Only show leads that still need Instagram found — exclude done/in-progress/junk
-        const pending = all.filter(a => !['verified', 'contactless', 'skip', 'verifying'].includes(a.contact_quality))
+        const pending = all.filter(a => !['verified', 'found', 'contactless', 'skip', 'verifying'].includes(a.contact_quality))
         setSpotifyLeads(pending)
       })
       .catch(() => {})
@@ -457,7 +457,7 @@ export default function Dashboard({ API, onSelect }) {
     batchLabelMap[s.session_id] = isOldest ? "Testing" : `Batch ${sessions.length - i}`
   })
 
-  const verifiedArtists   = sortedArtists.filter(a => a.contact_quality === 'verified')
+  const verifiedArtists   = sortedArtists.filter(a => a.contact_quality === 'verified' || a.contact_quality === 'found')
   const inProgressArtists = sortedArtists.filter(a => a.contact_quality === 'verifying' && a.instagram)
   const displayedArtists  =
     activeTab === "verified"    ? verifiedArtists :
