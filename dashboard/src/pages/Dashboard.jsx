@@ -457,8 +457,8 @@ export default function Dashboard({ API, onSelect }) {
     batchLabelMap[s.session_id] = isOldest ? "Testing" : `Batch ${sessions.length - i}`
   })
 
-  const verifiedArtists   = sortedArtists.filter(a => a.contact_quality === 'verified' || a.contact_quality === 'found')
-  const unverifiedArtists = sortedArtists.filter(a => a.contact_quality !== 'verified' && a.contact_quality !== 'found')
+  const verifiedArtists   = sortedArtists.filter(a => a.instagram)
+  const unverifiedArtists = sortedArtists.filter(a => !a.instagram)
   const inProgressArtists = sortedArtists.filter(a => a.contact_quality === 'verifying' && a.instagram)
   const displayedArtists  =
     activeTab === "verified"    ? verifiedArtists :
