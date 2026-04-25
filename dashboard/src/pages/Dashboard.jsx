@@ -694,61 +694,73 @@ export default function Dashboard({ API, onSelect }) {
       )}
 
       {/* ── Header ── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#fff", margin: 0, letterSpacing: "-0.04em", background: "linear-gradient(90deg,#fff 60%,#1DB954)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Renegade Engine</h1>
-          <p style={{ color: "#444", fontSize: 12, margin: "4px 0 0", letterSpacing: "0.06em", textTransform: "uppercase" }}>Artist Lead Dashboard · Spotify</p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={refreshListeners}
-            disabled={refreshingListeners || listenerRefreshStatus?.busy}
-            title="Re-fetch verified listener counts for all leads"
-            style={{ background: "#0a0a1a", border: "0.5px solid #1a1a3a", borderRadius: 8, padding: "8px 16px", color: (refreshingListeners || listenerRefreshStatus?.busy) ? "#333" : "#6c8cff", fontSize: 13, cursor: (refreshingListeners || listenerRefreshStatus?.busy) ? "default" : "pointer", fontWeight: 500 }}
-          >
-            {listenerRefreshStatus?.busy
-              ? `${listenerRefreshStatus.processed}/${listenerRefreshStatus.total}...`
-              : refreshingListeners ? "Starting..." : "Refresh Listeners"}
-          </button>
-          {filterSession ? (() => {
-            const idx = sessions.findIndex(s => s.session_id === filterSession)
-            const isOldest = idx === sessions.length - 1
-            const batchNum = sessions.length - idx
-            const label = isOldest ? "Testing Batch" : `Batch ${batchNum}`
-            return (
+      {(() => {
+        const mob = windowWidth < 600
+        const btnStyle = (bg, border, color, extra = {}) => ({
+          background: bg, border, borderRadius: 8,
+          padding: mob ? "7px 10px" : "8px 16px",
+          color, fontSize: mob ? 11 : 13,
+          cursor: "pointer", fontWeight: 500,
+          whiteSpace: "nowrap", ...extra
+        })
+        return (
+          <div style={{ display: "flex", flexDirection: mob ? "column" : "row", alignItems: mob ? "flex-start" : "center", justifyContent: "space-between", gap: mob ? 10 : 0, marginBottom: "1.5rem" }}>
+            <div>
+              <h1 style={{ fontSize: 22, fontWeight: 700, color: "#fff", margin: 0, letterSpacing: "-0.04em", background: "linear-gradient(90deg,#fff 60%,#1DB954)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Renegade Engine</h1>
+              <p style={{ color: "#444", fontSize: 12, margin: "4px 0 0", letterSpacing: "0.06em", textTransform: "uppercase" }}>Artist Lead Dashboard · Spotify</p>
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               <button
-                onClick={scanBatch}
-                disabled={scanningBatch || v2Status?.busy}
-                title={`Run Playwright + Claude enrichment on all leads in ${label}`}
-                style={{ background: (scanningBatch || v2Status?.busy) ? "#0a0a0a" : "#0d1a2a", border: `0.5px solid ${(scanningBatch || v2Status?.busy) ? "#1a1a1a" : "#1a4a6a"}`, borderRadius: 8, padding: "8px 16px", color: (scanningBatch || v2Status?.busy) ? "#333" : "#4a9acc", fontSize: 13, cursor: (scanningBatch || v2Status?.busy) ? "default" : "pointer", fontWeight: 600, whiteSpace: "nowrap" }}
+                onClick={refreshListeners}
+                disabled={refreshingListeners || listenerRefreshStatus?.busy}
+                title="Re-fetch verified listener counts for all leads"
+                style={btnStyle("#0a0a1a", "0.5px solid #1a1a3a", (refreshingListeners || listenerRefreshStatus?.busy) ? "#333" : "#6c8cff", { cursor: (refreshingListeners || listenerRefreshStatus?.busy) ? "default" : "pointer" })}
               >
-                {scanningBatch ? "Starting..." : v2Status?.busy ? `Scanning ${v2Status.processed}/${v2Status.total}...` : `Scan ${label} Leads`}
+                {listenerRefreshStatus?.busy
+                  ? `${listenerRefreshStatus.processed}/${listenerRefreshStatus.total}...`
+                  : refreshingListeners ? "Starting..." : mob ? "Listeners" : "Refresh Listeners"}
               </button>
-            )
-          })() : (
-            <button
-              onClick={rescanAll}
-              disabled={rescanningAll}
-              title="Clear all contact data for every new lead and re-enrich from scratch"
-              style={{ background: confirmRescan ? "#1a0a00" : "#0a0f00", border: `0.5px solid ${confirmRescan ? "#cc6600" : "#1a2a00"}`, borderRadius: 8, padding: "8px 16px", color: confirmRescan ? "#ff9800" : "#88aa00", fontSize: 13, cursor: rescanningAll ? "default" : "pointer", fontWeight: confirmRescan ? 600 : 500 }}
-            >
-              {rescanningAll ? "Resetting..." : confirmRescan ? "Confirm Rescan All?" : "Rescan All Leads"}
-            </button>
-          )}
-          <button onClick={() => { setDiscoveryOpen(true) }} style={{ background: "linear-gradient(135deg,#1a0a2e,#0d1a2e)", border: "1px solid #6633ff44", borderRadius: 8, padding: "8px 18px", color: "#aa66ff", fontSize: 13, cursor: "pointer", fontWeight: 700, letterSpacing: "0.02em" }}>
-            + Run Discovery
-          </button>
-          <button onClick={() => setSpotifyDumpOpen(true)} style={{ background: "#0a1a0f", border: "0.5px solid #1DB95433", borderRadius: 8, padding: "8px 16px", color: "#1DB954", fontSize: 13, cursor: "pointer", fontWeight: 500 }}>
-            Spotify Links
-          </button>
-          <button onClick={() => setPastePanelOpen(true)} style={{ background: "#0d0a1a", border: "0.5px solid #3a1a6a", borderRadius: 8, padding: "8px 16px", color: "#9966ff", fontSize: 13, cursor: "pointer", fontWeight: 500 }}>
-            Paste & Sync
-          </button>
-          <button onClick={previewFlush} style={{ background: "#1a0808", border: "0.5px solid #3a1515", borderRadius: 8, padding: "8px 16px", color: "#cc4444", fontSize: 13, cursor: "pointer", fontWeight: 500 }}>
-            Flush Junk Leads
-          </button>
-        </div>
-      </div>
+              {filterSession ? (() => {
+                const idx = sessions.findIndex(s => s.session_id === filterSession)
+                const isOldest = idx === sessions.length - 1
+                const batchNum = sessions.length - idx
+                const label = isOldest ? "Testing Batch" : `Batch ${batchNum}`
+                return (
+                  <button
+                    onClick={scanBatch}
+                    disabled={scanningBatch || v2Status?.busy}
+                    title={`Run Playwright + Claude enrichment on all leads in ${label}`}
+                    style={btnStyle((scanningBatch || v2Status?.busy) ? "#0a0a0a" : "#0d1a2a", `0.5px solid ${(scanningBatch || v2Status?.busy) ? "#1a1a1a" : "#1a4a6a"}`, (scanningBatch || v2Status?.busy) ? "#333" : "#4a9acc", { cursor: (scanningBatch || v2Status?.busy) ? "default" : "pointer", fontWeight: 600 })}
+                  >
+                    {scanningBatch ? "Starting..." : v2Status?.busy ? `${v2Status.processed}/${v2Status.total}...` : `Scan ${label}`}
+                  </button>
+                )
+              })() : (
+                <button
+                  onClick={rescanAll}
+                  disabled={rescanningAll}
+                  title="Clear all contact data for every new lead and re-enrich from scratch"
+                  style={btnStyle(confirmRescan ? "#1a0a00" : "#0a0f00", `0.5px solid ${confirmRescan ? "#cc6600" : "#1a2a00"}`, confirmRescan ? "#ff9800" : "#88aa00", { cursor: rescanningAll ? "default" : "pointer", fontWeight: confirmRescan ? 600 : 500 })}
+                >
+                  {rescanningAll ? "Resetting..." : confirmRescan ? "Confirm?" : mob ? "Rescan All" : "Rescan All Leads"}
+                </button>
+              )}
+              <button onClick={() => { setDiscoveryOpen(true) }} style={btnStyle("linear-gradient(135deg,#1a0a2e,#0d1a2e)", "1px solid #6633ff44", "#aa66ff", { fontWeight: 700, letterSpacing: "0.02em" })}>
+                + Discovery
+              </button>
+              <button onClick={() => setSpotifyDumpOpen(true)} style={btnStyle("#0a1a0f", "0.5px solid #1DB95433", "#1DB954")}>
+                Spotify
+              </button>
+              <button onClick={() => setPastePanelOpen(true)} style={btnStyle("#0d0a1a", "0.5px solid #3a1a6a", "#9966ff")}>
+                Paste
+              </button>
+              <button onClick={previewFlush} style={btnStyle("#1a0808", "0.5px solid #3a1515", "#cc4444")}>
+                {mob ? "Flush" : "Flush Junk"}
+              </button>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Auto-enrichment status bar ── */}
       {enrichStatus?.busy && (
