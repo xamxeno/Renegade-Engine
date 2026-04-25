@@ -191,7 +191,7 @@ export default function ArtistDetail({ API, id, onBack }) {
   try { genres = JSON.parse(artist.genres || "[]") } catch {}
 
   return (
-    <div style={{ padding: "2rem", maxWidth: 800, margin: "0 auto" }}>
+    <div style={{ padding: "2rem 2rem calc(2rem + env(safe-area-inset-bottom))", maxWidth: 800, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
         <button onClick={onBack} style={{
           background: "transparent", border: "0.5px solid #222",

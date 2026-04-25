@@ -464,7 +464,7 @@ export default function Dashboard({ API, onSelect }) {
     sortedArtists
 
   return (
-    <div style={{ padding: "2rem", maxWidth: 1280, margin: "0 auto", minHeight: "100vh", background: "radial-gradient(ellipse at top, #0d0a1a 0%, #050505 60%)" }}>
+    <div style={{ padding: "2rem 2rem calc(2rem + env(safe-area-inset-bottom))", maxWidth: 1280, margin: "0 auto", minHeight: "100vh", background: "radial-gradient(ellipse at top, #0d0a1a 0%, #050505 60%)" }}>
 
       {/* ── Spotify Links Dump Modal ── */}
       {spotifyDumpOpen && (() => {

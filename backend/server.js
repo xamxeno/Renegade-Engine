@@ -76,7 +76,10 @@ async function verifyWorker () {
     console.log(`[Verify] ${name} @${handle} — checking IG...`)
 
     try {
-      const html = await fetchIGPage(handle)
+      const html = await Promise.race([
+        fetchIGPage(handle),
+        new Promise(r => setTimeout(() => r(''), 15000))
+      ])
       const { followers, bio } = parseIGPage(html)
 
       let quality = 'verified'
