@@ -195,6 +195,13 @@ app.post('/api/artists/add', async (req, res) => {
 
   if (!name) return res.status(500).json({ error: 'Could not scrape artist name — pass name in body' })
 
+  // Check if already exists — don't overwrite contact_quality/status of flagged or verified leads
+  const { data: existing } = await supabase.from('artists')
+    .select('id, contact_quality, status').eq('platform', 'spotify').eq('platform_id', platform_id).maybeSingle()
+  if (existing && ['skip', 'verified', 'found', 'contactless'].includes(existing.contact_quality)) {
+    return res.json({ success: true, artist: existing, already_exists: true })
+  }
+
   const { data, error } = await supabase.from('artists').upsert({
     name, platform: 'spotify', platform_id,
     profile_url: `https://open.spotify.com/artist/${platform_id}`,

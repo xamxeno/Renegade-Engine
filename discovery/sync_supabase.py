@@ -33,12 +33,12 @@ def run():
             "apikey":        SUPABASE_KEY,
             "Authorization": f"Bearer {SUPABASE_KEY}",
             "Content-Type":  "application/json",
-            "Prefer":        "resolution=merge-duplicates"
+            "Prefer":        "resolution=ignore-duplicates"
         },
         {
             "Authorization": f"Bearer {SUPABASE_KEY}",
             "Content-Type":  "application/json",
-            "Prefer":        "resolution=merge-duplicates",
+            "Prefer":        "resolution=ignore-duplicates",
             "apikey":        SUPABASE_KEY,
         }
     ]
