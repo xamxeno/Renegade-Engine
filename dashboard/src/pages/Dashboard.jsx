@@ -537,7 +537,7 @@ export default function Dashboard({ API, onSelect }) {
     allLeads
 
   return (
-    <div style={{ padding: "2rem 2rem calc(2rem + env(safe-area-inset-bottom))", maxWidth: 1280, margin: "0 auto", minHeight: "100vh", position: "relative", zIndex: 1, background: "#0a0a0a" }}>
+    <div style={{ padding: "2rem 2rem calc(2rem + env(safe-area-inset-bottom))", maxWidth: 1280, margin: "0 auto", minHeight: "100vh", position: "relative", zIndex: 1 }}>
 
       {/* ── Spotify Links Dump Modal ── */}
       {spotifyDumpOpen && (() => {
@@ -1107,8 +1107,8 @@ function ArtistCard({ artist, onClick, selected, onSelect, batchLabel }) {
       style={{
         display: "block", textDecoration: "none",
         background: selected
-          ? `radial-gradient(ellipse at top left, ${sc.text}55 0%, #16162a 100%)`
-          : `radial-gradient(ellipse at top left, ${statusGlow} 0%, #131313 100%)`,
+          ? `radial-gradient(ellipse at top left, ${sc.text}44 0%, #16162a 70%)`
+          : `radial-gradient(ellipse at top left, ${statusGlow} 0%, #111 65%)`,
         border: selected ? `1.5px solid #ff4d0077` : `0.5px solid ${statusBorder}`,
         borderRadius: 12, padding: "14px 16px", cursor: "pointer",
         transition: "border-color 0.15s, background 0.15s",
