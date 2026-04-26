@@ -237,7 +237,7 @@ export default function ArtistDetail({ API, id, onBack }) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginBottom: 16 }}>
-        <div style={{ background: "rgba(17,17,17,0.82)", border: "0.5px solid #1f1f1f", borderRadius: 12, padding: "20px" }}>
+        <div style={{ background: "rgba(17,17,17,0.93)", border: "0.5px solid #1f1f1f", borderRadius: 12, padding: "20px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
             <div style={{
               width: 52, height: 52, borderRadius: "50%", background: "#1a1a1a",
@@ -253,15 +253,15 @@ export default function ArtistDetail({ API, id, onBack }) {
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div style={{ background: "rgba(13,13,13,0.82)", borderRadius: 8, padding: "10px 12px" }}>
+            <div style={{ background: "rgba(13,13,13,0.90)", borderRadius: 8, padding: "10px 12px" }}>
               <div style={{ color: "#444", fontSize: 11, marginBottom: 4 }}>AI Score</div>
               <div style={{ color: scoreColor, fontWeight: 600, fontSize: 13 }}>{score}/100</div>
             </div>
-            <div style={{ background: "rgba(13,13,13,0.82)", borderRadius: 8, padding: "10px 12px" }}>
+            <div style={{ background: "rgba(13,13,13,0.90)", borderRadius: 8, padding: "10px 12px" }}>
               <div style={{ color: "#444", fontSize: 11, marginBottom: 4 }}>Status</div>
               <div style={{ color: "#ff9800", fontSize: 13 }}>{status}</div>
             </div>
-            <div style={{ background: "rgba(13,13,13,0.82)", borderRadius: 8, padding: "10px 12px" }}>
+            <div style={{ background: "rgba(13,13,13,0.90)", borderRadius: 8, padding: "10px 12px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                 <span style={{ color: "#444", fontSize: 11 }}>Listeners</span>
                 <button onClick={refreshListeners} disabled={refreshingListeners} title="Refresh listener count from Spotify"
@@ -271,7 +271,7 @@ export default function ArtistDetail({ API, id, onBack }) {
               </div>
               <div style={{ color: "#ccc", fontSize: 13 }}>{(artist.listeners || artist.followers || 0).toLocaleString()}</div>
             </div>
-            <div style={{ background: "rgba(13,13,13,0.82)", borderRadius: 8, padding: "10px 12px" }}>
+            <div style={{ background: "rgba(13,13,13,0.90)", borderRadius: 8, padding: "10px 12px" }}>
               <div style={{ color: "#444", fontSize: 11, marginBottom: 4 }}>Contact Quality</div>
               <div style={{ color: artist.contact_quality === "excellent" ? "#ffcc00" : artist.contact_quality === "good" ? "#66bb6a" : "#555", fontSize: 13, fontWeight: 500 }}>
                 {artist.contact_quality || "unknown"}
@@ -294,7 +294,7 @@ export default function ArtistDetail({ API, id, onBack }) {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {artist.instagram && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(13,13,13,0.82)", borderRadius: 8, padding: "9px 12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(13,13,13,0.90)", borderRadius: 8, padding: "9px 12px" }}>
                 <span style={{ color: "#8888ff", fontSize: 12, minWidth: 60 }}>Instagram</span>
                 <a href={`https://instagram.com/${artist.instagram}`} target="_blank" rel="noreferrer"
                   style={{ color: "#ccc", fontSize: 13, flex: 1 }}>@{artist.instagram}</a>
@@ -306,7 +306,7 @@ export default function ArtistDetail({ API, id, onBack }) {
               </div>
             )}
             {artist.facebook && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(13,13,13,0.82)", borderRadius: 8, padding: "9px 12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(13,13,13,0.90)", borderRadius: 8, padding: "9px 12px" }}>
                 <span style={{ color: "#5b9bd5", fontSize: 12, minWidth: 60 }}>Facebook</span>
                 <a href={`https://${artist.facebook}`} target="_blank" rel="noreferrer"
                   style={{ color: "#ccc", fontSize: 13, flex: 1 }}>{artist.facebook}</a>
@@ -317,7 +317,7 @@ export default function ArtistDetail({ API, id, onBack }) {
               </div>
             )}
             {artist.phone && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(13,13,13,0.82)", borderRadius: 8, padding: "9px 12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(13,13,13,0.90)", borderRadius: 8, padding: "9px 12px" }}>
                 <span style={{ color: "#bb88ff", fontSize: 12, minWidth: 60 }}>Phone</span>
                 <span style={{ color: "#ccc", fontSize: 13, flex: 1 }}>{artist.phone}</span>
                 <a href={`tel:${artist.phone}`}
@@ -327,7 +327,7 @@ export default function ArtistDetail({ API, id, onBack }) {
               </div>
             )}
             {artist.email && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(13,13,13,0.82)", borderRadius: 8, padding: "9px 12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(13,13,13,0.90)", borderRadius: 8, padding: "9px 12px" }}>
                 <span style={{ color: "#66bb6a", fontSize: 12, minWidth: 60 }}>Email</span>
                 <span style={{ color: "#ccc", fontSize: 13, flex: 1 }}>{artist.email}</span>
                 <a href={`mailto:${artist.email}`}
@@ -367,7 +367,7 @@ export default function ArtistDetail({ API, id, onBack }) {
           )}
         </div>
 
-        <div style={{ background: "rgba(17,17,17,0.82)", border: "0.5px solid #1f1f1f", borderRadius: 12, padding: "20px" }}>
+        <div style={{ background: "rgba(17,17,17,0.93)", border: "0.5px solid #1f1f1f", borderRadius: 12, padding: "20px" }}>
           <div style={{ color: "#888", fontSize: 12, marginBottom: 8 }}>AI analysis</div>
           <p style={{ color: "#ccc", fontSize: 13, lineHeight: 1.7, margin: "0 0 16px" }}>
             {artist.score_reason || "No analysis yet."}
@@ -375,7 +375,7 @@ export default function ArtistDetail({ API, id, onBack }) {
 
           <div style={{ color: "#888", fontSize: 12, marginBottom: 8 }}>Update status</div>
           <select value={status} onChange={e => setStatus(e.target.value)}
-            style={{ width: "100%", background: "rgba(13,13,13,0.82)", border: "0.5px solid #222", borderRadius: 6, padding: "8px 10px", color: "#ccc", fontSize: 13, marginBottom: 10 }}>
+            style={{ width: "100%", background: "rgba(13,13,13,0.90)", border: "0.5px solid #222", borderRadius: 6, padding: "8px 10px", color: "#ccc", fontSize: 13, marginBottom: 10 }}>
             {["new","contacted","pitched","signed","ignored"].map(s => (
               <option key={s} value={s}>{s}</option>
             ))}
@@ -384,7 +384,7 @@ export default function ArtistDetail({ API, id, onBack }) {
           <div style={{ color: "#888", fontSize: 12, marginBottom: 6 }}>Notes</div>
           <textarea value={notes} onChange={e => setNotes(e.target.value)}
             rows={3} style={{
-              width: "100%", background: "rgba(13,13,13,0.82)", border: "0.5px solid #222",
+              width: "100%", background: "rgba(13,13,13,0.90)", border: "0.5px solid #222",
               borderRadius: 6, padding: "8px 10px", color: "#ccc", fontSize: 13,
               resize: "vertical", boxSizing: "border-box"
             }} />
@@ -396,7 +396,7 @@ export default function ArtistDetail({ API, id, onBack }) {
         </div>
       </div>
 
-      <div style={{ background: "rgba(17,17,17,0.82)", border: "0.5px solid #1f1f1f", borderRadius: 12, padding: "20px" }}>
+      <div style={{ background: "rgba(17,17,17,0.93)", border: "0.5px solid #1f1f1f", borderRadius: 12, padding: "20px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div style={{ color: "#fff", fontWeight: 500, fontSize: 15 }}>Pitch Message</div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -432,7 +432,7 @@ export default function ArtistDetail({ API, id, onBack }) {
           rows={3}
           placeholder="Generate or write your own..."
           style={{
-            width: "100%", background: "rgba(13,13,13,0.82)", border: "0.5px solid #222",
+            width: "100%", background: "rgba(13,13,13,0.90)", border: "0.5px solid #222",
             borderRadius: 8, padding: "12px", color: "#ccc", fontSize: 14,
             lineHeight: 1.7, resize: "none", boxSizing: "border-box"
           }}
