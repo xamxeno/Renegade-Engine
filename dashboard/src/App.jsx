@@ -32,6 +32,8 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: "#050505", fontFamily: "var(--font-sans)", position: "relative" }}>
       <GraffitiBackground />
+      {/* Dark overlay so graffiti sits at ~20% visibility */}
+      <div style={{ position: "fixed", inset: 0, zIndex: 0, background: "rgba(5,5,5,0.80)", pointerEvents: "none" }} />
       <Header onNav={navigate} currentPage={page} />
       {page === "dashboard" && <Dashboard API={API} onSelect={(id) => navigate("artist", id)} />}
       {page === "artist" && <ArtistDetail API={API} id={selectedId} onBack={() => navigate("dashboard")} />}
