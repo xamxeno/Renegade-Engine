@@ -73,6 +73,7 @@ JUNK_KEYWORDS = [
     "music network","music community","sound healing","music therapy",
     # Generic/placeholder names that Spotify returns from keyword searches
     "unsigned","untitled","unspecified","unknown","unnamed","no name",
+    "contactless","n/a","tbd","tba","placeholder","test","demo",
     "artist","rapper","singer","vocalist","musician","performer",
     "independent","indie artist","new artist","emerging artist",
     "upcoming artist","rising artist","unsigned artist",
@@ -86,7 +87,7 @@ PRODUCER_NAME_PATTERNS = [
 ]
 
 def is_junk(name):
-    n = name.lower()
+    n = name.lower().strip()
     if any(kw in n for kw in JUNK_KEYWORDS):
         return True
     if any(p in n for p in PRODUCER_NAME_PATTERNS):
@@ -94,6 +95,10 @@ def is_junk(name):
     if len(name.split()) > 5:
         return True
     if sum(c.isdigit() for c in name) > 3:
+        return True
+    # All-caps names 6+ chars are usually labels/playlists, not artists
+    letters = [c for c in name if c.isalpha()]
+    if len(letters) >= 6 and all(c.isupper() for c in letters):
         return True
     return False
 
