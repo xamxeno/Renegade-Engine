@@ -204,7 +204,7 @@ export default function ArtistDetail({ API, id, onBack }) {
       padding: "2rem 2rem calc(2rem + env(safe-area-inset-bottom))",
       maxWidth: 800, margin: "0 auto",
       minHeight: "100vh",
-      background: `radial-gradient(ellipse at top, ${statusColor}18 0%, transparent 60%)`,
+      background: `radial-gradient(ellipse at top, ${statusColor}40 0%, transparent 65%)`,
       transition: "background 0.4s ease"
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>

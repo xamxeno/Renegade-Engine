@@ -1097,8 +1097,8 @@ function ArtistCard({ artist, onClick, selected, onSelect, batchLabel }) {
   const score = artist.score || 0
   const scoreColor = score >= 70 ? "#4caf50" : score >= 50 ? "#ff9800" : "#666"
 
-  const statusGlow = sc.text + "18"
-  const statusBorder = sc.text + "33"
+  const statusGlow = sc.text + "35"
+  const statusBorder = sc.text + "55"
 
   return (
     <a
@@ -1107,9 +1107,9 @@ function ArtistCard({ artist, onClick, selected, onSelect, batchLabel }) {
       style={{
         display: "block", textDecoration: "none",
         background: selected
-          ? `radial-gradient(ellipse at top left, ${sc.text}22 0%, #16162a 60%)`
-          : `radial-gradient(ellipse at top left, ${statusGlow} 0%, #111 55%)`,
-        border: selected ? `1.5px solid #ff4d0055` : `0.5px solid ${statusBorder}`,
+          ? `radial-gradient(ellipse at top left, ${sc.text}44 0%, #16162a 70%)`
+          : `radial-gradient(ellipse at top left, ${statusGlow} 0%, #111 65%)`,
+        border: selected ? `1.5px solid #ff4d0077` : `0.5px solid ${statusBorder}`,
         borderRadius: 12, padding: "14px 16px", cursor: "pointer",
         transition: "border-color 0.15s, background 0.15s",
         position: "relative",
