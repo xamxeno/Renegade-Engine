@@ -77,6 +77,7 @@ PRODUCER_NAME_PATTERNS = [
     "prod.", "prod by", "prodby", "prod_by", "xproducer", "beatz",
     "tha producer", "the producer", "on the beat", "type beat",
     "producer", "beatmaker", "beat maker",
+    "dj ", " dj ", "dj-", "dj_", "deejay", "disc jockey", "turntablist",
 ]
 
 def is_junk(name):

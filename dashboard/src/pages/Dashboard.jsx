@@ -34,6 +34,8 @@ export default function Dashboard({ API, onSelect }) {
   const [refreshingListeners, setRefreshingListeners] = useState(false)
   const [rescanningAll, setRescanningAll] = useState(false)
   const [confirmRescan, setConfirmRescan] = useState(false)
+  const [bioScanStatus, setBioScanStatus] = useState(null)
+  const [bioScanning, setBioScanning] = useState(false)
   const [sessions, setSessions] = useState([])
   const [filterSession, setFilterSession] = useState("")
   const [v2Status, setV2Status] = useState(null)
@@ -169,7 +171,24 @@ export default function Dashboard({ API, onSelect }) {
       })
       const d = await r.json()
       if (d.error) setPasteResult({ error: d.error })
-      else { setPasteResult({ ok: true, updated: d.updated, skipped: d.skipped }); fetchArtists() }
+      else {
+        setPasteResult({ ok: true, updated: d.updated, skipped: d.skipped })
+        await fetchArtists()
+        // Auto bio-scan all leads that were just synced (those with instagram handles)
+        const withIG = entries.filter(e => e.instagram)
+        if (withIG.length > 0) {
+          // Fetch fresh IDs for these Spotify URLs
+          const urls = withIG.map(e => e.spotify_url || e.profile_url).filter(Boolean)
+          try {
+            const idRes = await fetch(`${API}/api/artists?limit=1000`)
+            const idData = await idRes.json()
+            const ids = (idData.artists || [])
+              .filter(a => urls.includes(a.profile_url) && a.instagram)
+              .map(a => a.id)
+            if (ids.length > 0) scanBios(ids)
+          } catch {}
+        }
+      }
     } catch { setPasteResult({ error: 'Server unreachable' }) }
     setSyncingJson(false)
   }
@@ -291,6 +310,35 @@ export default function Dashboard({ API, onSelect }) {
     const interval = setInterval(poll, 5000)
     return () => clearInterval(interval)
   }, [API])
+
+  // Poll bio scan status every 4s
+  const prevBioScanBusy = useRef(false)
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const r = await fetch(`${API}/api/artists/scan-bios/status`)
+        const d = await r.json()
+        setBioScanStatus(d)
+        if (prevBioScanBusy.current && !d.running) { fetchArtists(); setBioScanning(false) }
+        prevBioScanBusy.current = d.running
+      } catch {}
+    }
+    poll()
+    const interval = setInterval(poll, 4000)
+    return () => clearInterval(interval)
+  }, [API])
+
+  const scanBios = async (ids) => {
+    if (!ids || ids.length === 0) return
+    setBioScanning(true)
+    try {
+      await fetch(`${API}/api/artists/scan-bios`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      })
+    } catch {}
+  }
 
   const previewFlush = async () => {
     try {
@@ -835,12 +883,17 @@ export default function Dashboard({ API, onSelect }) {
                 )
               })() : (
                 <button
-                  onClick={rescanAll}
-                  disabled={rescanningAll}
-                  title="Clear all contact data for every new lead and re-enrich from scratch"
-                  style={btnStyle(confirmRescan ? "#1a0a00" : "#0a0f00", `0.5px solid ${confirmRescan ? "#cc6600" : "#1a2a00"}`, confirmRescan ? "#ff9800" : "#88aa00", { cursor: rescanningAll ? "default" : "pointer", fontWeight: confirmRescan ? 600 : 500 })}
+                  onClick={() => {
+                    const ids = displayedArtists.filter(a => a.instagram).map(a => a.id)
+                    scanBios(ids)
+                  }}
+                  disabled={bioScanning || bioScanStatus?.running}
+                  title="Scan Instagram bios of visible leads and flag producers/DJs"
+                  style={btnStyle("#0a0f00", `0.5px solid ${(bioScanning || bioScanStatus?.running) ? "#222" : "#1a3a00"}`, (bioScanning || bioScanStatus?.running) ? "#333" : "#88cc44", { cursor: (bioScanning || bioScanStatus?.running) ? "default" : "pointer" })}
                 >
-                  {rescanningAll ? "Resetting..." : confirmRescan ? "Confirm?" : mob ? "Rescan All" : "Rescan All Leads"}
+                  {bioScanStatus?.running
+                    ? `Scanning ${bioScanStatus.processed}/${bioScanStatus.total}...`
+                    : "Scan Bios"}
                 </button>
               )}
               <button onClick={() => { setDiscoveryOpen(true) }} style={btnStyle("linear-gradient(135deg,#1a0a2e,#0d1a2e)", "1px solid #6633ff44", "#aa66ff", { fontWeight: 700, letterSpacing: "0.02em" })}>
@@ -899,6 +952,22 @@ export default function Dashboard({ API, onSelect }) {
           <span style={{ color: "#3a2a6a", marginLeft: "auto", whiteSpace: "nowrap" }}>
             {verifyStatus.processed}/{verifyStatus.total} · {verifyStatus.verified} verified
           </span>
+        </div>
+      )}
+
+      {/* ── Bio scan status bar ── */}
+      {bioScanStatus?.running && (
+        <div style={{ background: "#0a0f0a", border: "0.5px solid #1a3a00", borderRadius: 8, padding: "8px 14px", marginBottom: "0.5rem", fontSize: 12, color: "#88cc44", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#88cc44", display: "inline-block", animation: "pulse 1.5s infinite", flexShrink: 0 }} />
+          <span>Scanning bios — <strong>{bioScanStatus.current}</strong></span>
+          <span style={{ color: "#2a4a00", marginLeft: "auto", whiteSpace: "nowrap" }}>
+            {bioScanStatus.processed}/{bioScanStatus.total} · {bioScanStatus.flagged} flagged
+          </span>
+        </div>
+      )}
+      {bioScanStatus && !bioScanStatus.running && bioScanStatus.total > 0 && (
+        <div style={{ background: "#0a0f0a", border: "0.5px solid #1a3a00", borderRadius: 8, padding: "8px 14px", marginBottom: "0.5rem", fontSize: 12, color: "#88cc44", display: "flex", alignItems: "center", gap: 10 }}>
+          <span>Bio scan complete — {bioScanStatus.flagged} producers/DJs flagged out of {bioScanStatus.total}</span>
         </div>
       )}
 

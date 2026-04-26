@@ -767,6 +767,83 @@ app.post('/api/artists/rescan-all', async (req, res) => {
   }
 })
 
+// POST /api/artists/scan-bios — fetch IG pages for a list of artist IDs and flag producers/DJs
+// Checks bio text AND username for producer/DJ keywords. Does NOT do enrichment.
+const BIO_SCAN_NAME_KEYWORDS = [
+  'dj ','dj-','dj_',' dj ','deejay','disc jockey','turntablist',
+  'producer','beat maker','beatmaker','prod by','beats by','beatsmith',
+  'mixing engineer','mastering engineer','audio engineer','sound engineer',
+  'fl studio','ableton','logic pro','trap producer','rnb producer',
+  'hip hop producer','record producer','music producer','executive producer',
+  'recording engineer','sound designer','edm producer','house producer',
+  'techno producer','dubstep producer','composer','film composer',
+  'session musician','studio engineer','mix engineer','beat store','beatz',
+]
+
+let _bioScanStats = { total: 0, processed: 0, flagged: 0, current: null, running: false }
+
+async function runBioScan(ids) {
+  _bioScanStats = { total: ids.length, processed: 0, flagged: 0, current: null, running: true }
+  console.log(`[BioScan] Starting scan of ${ids.length} artists`)
+
+  const { data: artists, error } = await supabase.from('artists').select('id,name,instagram').in('id', ids)
+  if (error || !artists) { _bioScanStats.running = false; return }
+
+  for (const artist of artists) {
+    _bioScanStats.current = artist.name
+    const handle = (artist.instagram || '').trim()
+    let flagged = false
+
+    // Check username itself for producer/DJ keywords
+    if (handle) {
+      const lhandle = handle.toLowerCase()
+      flagged = BIO_SCAN_NAME_KEYWORDS.some(kw => lhandle.includes(kw.trim()))
+    }
+
+    // Fetch IG bio if not already flagged by username
+    if (!flagged && handle) {
+      try {
+        const html = await Promise.race([
+          fetchIGPage(handle),
+          new Promise(r => setTimeout(() => r(''), 15000))
+        ])
+        if (html && html.length > 500) {
+          const { bio } = parseIGPage(html)
+          if (bio) flagged = BIO_SCAN_NAME_KEYWORDS.some(kw => bio.includes(kw))
+        }
+      } catch {}
+    }
+
+    if (flagged) {
+      await supabase.from('artists').update({ contact_quality: 'skip', updated_at: new Date().toISOString() }).eq('id', artist.id)
+      _bioScanStats.flagged++
+      console.log(`[BioScan] Flagged ${artist.name} as producer/DJ`)
+    }
+    _bioScanStats.processed++
+    await new Promise(r => setTimeout(r, 800))
+  }
+
+  _bioScanStats.current = null
+  _bioScanStats.running = false
+  console.log(`[BioScan] Done — ${_bioScanStats.flagged} flagged out of ${ids.length}`)
+}
+
+app.post('/api/artists/scan-bios', async (req, res) => {
+  try {
+    const { ids } = req.body
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids array required' })
+    if (_bioScanStats.running) return res.status(409).json({ error: 'Bio scan already running' })
+    runBioScan(ids) // fire and forget
+    res.json({ success: true, queued: ids.length })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/artists/scan-bios/status', (req, res) => {
+  res.json(_bioScanStats)
+})
+
 // POST /api/enrich/retry-contactless — reset all contactless artists so worker re-processes them
 app.post('/api/enrich/retry-contactless', async (req, res) => {
   try {
