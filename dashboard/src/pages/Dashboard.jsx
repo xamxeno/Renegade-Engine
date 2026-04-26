@@ -107,7 +107,7 @@ export default function Dashboard({ API, onSelect }) {
       .then(d => {
         const all = d.artists || []
         // Only show leads that still need Instagram found — exclude done/in-progress/junk
-        const pending = all.filter(a => !a.instagram)
+        const pending = all.filter(a => !a.instagram && a.contact_quality !== 'skip')
         setSpotifyLeads(pending)
       })
       .catch(() => {})
