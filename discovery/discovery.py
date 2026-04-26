@@ -631,22 +631,10 @@ def run():
         print("  No new candidates found. All artists already in DB or none passed filters.")
         return
 
-    # ── Score candidates in batches before scanning IG ───────────────────────
-    print(f"\n  Scoring {len(all_candidates)} candidates with Claude...")
-    SCORE_BATCH = 20
-    for b in range(0, len(all_candidates), SCORE_BATCH):
-        score_batch(all_candidates[b:b+SCORE_BATCH])
-        time.sleep(0.5)
-
-    # Filter by min score before spending time on IG scans
-    scoreable = [a for a in all_candidates if (a.get("score") or 0) >= MIN_SCORE]
-    print(f"  Passed score filter (>={MIN_SCORE}): {len(scoreable)} / {len(all_candidates)}")
-    scoreable.sort(key=lambda a: a.get("score") or 0, reverse=True)  # best first
-
     # ── Instagram scan loop — runs until TARGET_LEADS saved ──────────────────
     new_leads = []
 
-    for i, artist in enumerate(scoreable):
+    for i, artist in enumerate(all_candidates):
         if len(new_leads) >= TARGET_LEADS:
             break
 
@@ -657,7 +645,7 @@ def run():
             print(f"  SKIP {artist['name']}: {listeners:,} listeners (over {MAX_LISTENERS:,} cap)")
             continue
 
-        print(f"  [{i+1}/{len(scoreable)}] {artist['name']} — {listeners:,} listeners — score {artist.get('score')}")
+        print(f"  [{i+1}/{len(all_candidates)}] {artist['name']} — {listeners:,} listeners")
         print(f"    Scanning Instagram...")
 
         scan_instagram(artist)

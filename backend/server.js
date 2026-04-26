@@ -461,6 +461,80 @@ app.post('/api/pitch', async (req, res) => {
   }
 })
 
+// POST /api/score — Claude-score a list of artist IDs (or all unscored if no ids given)
+app.post('/api/score', async (req, res) => {
+  const { ids } = req.body || {}
+  try {
+    let query = supabase.from('artists').select('id,name,platform,listeners,followers,genres,instagram,ig_followers,needs,contact_quality')
+    if (ids?.length) query = query.in('id', ids)
+    const { data: artists, error } = await query
+    if (error) throw error
+    if (!artists?.length) return res.json({ scored: 0 })
+
+    const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY
+    if (!CLAUDE_API_KEY) return res.status(500).json({ error: 'CLAUDE_API_KEY not set' })
+
+    const BATCH = 20
+    let scored = 0
+    for (let i = 0; i < artists.length; i += BATCH) {
+      const batch = artists.slice(i, i + BATCH)
+      const payload = batch.map((a, idx) => ({
+        index: idx,
+        name: a.name,
+        platform: a.platform,
+        listeners: a.listeners || a.followers || 0,
+        genres: (() => { try { return JSON.parse(a.genres || '[]') } catch { return [] } })().slice(0, 5),
+        has_instagram: !!a.instagram,
+        ig_followers: a.ig_followers || 0,
+        needs: a.needs || '',
+        contact_quality: a.contact_quality || 'none',
+      }))
+
+      const prompt = `You are a lead-scoring analyst for Renegade Records — a recording studio targeting INDEPENDENT artists who need professional help RIGHT NOW.
+
+Sweet-spot client: solo performer, unsigned/self-managed, 1k–15k monthly listeners, R&B / Hip-Hop / Neo Soul / Trap Soul, US/Canada/UK/Australia/UAE, zero label backing.
+
+SCORING RULES:
+90-100  PERFECT: 1k–10k listeners + R&B/Hip-Hop/Neo Soul/Trap Soul + indie/DIY signals + no management
+80-89   STRONG: 10k–20k listeners OR 1k–10k with neutral needs, genre matches
+70-79   GOOD: 20k–35k listeners, genre matches, no management flags
+60-69   BORDERLINE: good genre + under 20k but some flag (empty needs, minimal data)
+0-59    DO NOT USE
+
+HARD ZERO: Producer, beatmaker, DJ, engineer, radio station, playlist, compilation. Genres: reggaeton, afrobeats, K-pop, Bollywood, country, rock, EDM, jazz, classical. Listeners above 35k. needs contains: managed by, warner, universal, sony, atlantic, columbia.
+
+Return ONLY valid JSON array:
+[{"index": 0, "score": 82, "reason": "One sentence", "is_solo_artist": true}]
+
+Artists:
+${JSON.stringify(payload)}`
+
+      try {
+        const r = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'x-api-key': CLAUDE_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+          body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2000, messages: [{ role: 'user', content: prompt }] })
+        })
+        const d = await r.json()
+        let raw = (d.content?.[0]?.text || '').trim().replace(/```json?\n?/g, '').replace(/```/g, '').trim()
+        const results = JSON.parse(raw)
+        for (const s of results) {
+          const artist = batch[s.index]
+          if (!artist) continue
+          const scoreVal = s.is_solo_artist === false ? 0 : (s.score || 0)
+          await supabase.from('artists').update({ score: scoreVal, score_reason: s.reason || '', updated_at: new Date().toISOString() }).eq('id', artist.id)
+          scored++
+        }
+      } catch (e) {
+        console.error('[Score] Batch error:', e.message)
+      }
+    }
+    res.json({ scored })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // POST /api/send-email — send outreach email
 app.post('/api/send-email', async (req, res) => {
   try {

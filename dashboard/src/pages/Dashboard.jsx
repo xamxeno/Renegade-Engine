@@ -27,6 +27,8 @@ export default function Dashboard({ API, onSelect }) {
   const [windowWidth, setWindowWidth] = useState(window.innerWidth)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [retryingContactless, setRetryingContactless] = useState(false)
+  const [scoringSelected, setScoringSelected] = useState(false)
+  const [scoringAll, setScoringAll] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [enrichingSelected, setEnrichingSelected] = useState(false)
   const [refreshingListeners, setRefreshingListeners] = useState(false)
@@ -432,6 +434,34 @@ export default function Dashboard({ API, onSelect }) {
     setEnrichingSelected(false)
   }
 
+  const scoreSelected = async () => {
+    const ids = [...selectedIds]
+    setScoringSelected(true)
+    try {
+      const r = await fetch(`${API}/api/score`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      })
+      const d = await r.json()
+      clearSelection()
+      fetchArtists()
+      if (d.scored) alert(`Scored ${d.scored} leads.`)
+    } catch {}
+    setScoringSelected(false)
+  }
+
+  const scoreAllLeads = async () => {
+    setScoringAll(true)
+    try {
+      const r = await fetch(`${API}/api/score`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+      const d = await r.json()
+      fetchArtists()
+      if (d.scored !== undefined) alert(`Scored ${d.scored} leads.`)
+    } catch {}
+    setScoringAll(false)
+  }
+
   // ── Sorting & filtering ───────────────────────────────────────────────────────
 
   const filtered = artists.filter(a =>
@@ -716,6 +746,21 @@ export default function Dashboard({ API, onSelect }) {
             {enrichingSelected ? "Queuing..." : "Run Enrichment"}
           </button>
           <div style={{ width: 1, height: 22, background: "#2a2a2a", margin: "0 2px" }} />
+          <button
+            onClick={scoreSelected}
+            disabled={scoringSelected}
+            style={{
+              background: scoringSelected ? "#111" : "#1a1a0a",
+              border: `1px solid ${scoringSelected ? '#222' : '#4a4a1a'}`,
+              borderRadius: 7, padding: "6px 13px",
+              color: scoringSelected ? "#333" : "#cccc44",
+              fontSize: 12, cursor: scoringSelected ? "default" : "pointer",
+              fontWeight: 500, whiteSpace: "nowrap",
+            }}
+          >
+            {scoringSelected ? "Scoring..." : "Score"}
+          </button>
+          <div style={{ width: 1, height: 22, background: "#2a2a2a", margin: "0 2px" }} />
           <button onClick={massDelete} style={{
             background: confirmingDelete ? "#3a0808" : "#1a0808",
             border: `1px solid ${confirmingDelete ? '#ff5555' : '#3a1515'}`,
@@ -789,6 +834,9 @@ export default function Dashboard({ API, onSelect }) {
               </button>
               <button onClick={() => setPastePanelOpen(true)} style={btnStyle("#0d0a1a", "0.5px solid #3a1a6a", "#9966ff")}>
                 Paste
+              </button>
+              <button onClick={scoreAllLeads} disabled={scoringAll} style={btnStyle("#1a1a0a", `0.5px solid ${scoringAll ? "#222" : "#4a4a1a"}`, scoringAll ? "#333" : "#cccc44", { cursor: scoringAll ? "default" : "pointer" })}>
+                {scoringAll ? "Scoring..." : mob ? "Score All" : "Score All Leads"}
               </button>
               <button onClick={previewFlush} style={btnStyle("#1a0808", "0.5px solid #3a1515", "#cc4444")}>
                 {mob ? "Flush" : "Flush Junk"}
