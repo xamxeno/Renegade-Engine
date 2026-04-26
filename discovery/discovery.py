@@ -131,6 +131,35 @@ SPOTIFY_KEYWORD_SEARCHES = [
     "unsigned hip hop artist toronto canada",
     "indie soul singer australia unsigned",
     "underground hip hop artist london uk",
+    "unsigned r&b singer usa 2024",
+    "indie rnb artist dubai uae",
+    "unsigned rapper usa self produced",
+    "new soul artist unsigned uk 2024",
+    "trap soul singer independent usa",
+    "neo soul artist independent australia",
+    "unsigned rnb singer chicago independent",
+    "indie pop rnb singer canada unsigned",
+    "independent afro rnb artist uk",
+    "unsigned melodic rapper usa indie",
+    "rnb singer songwriter unsigned usa",
+    "independent hip hop artist miami",
+    "unsigned soul singer houston",
+    "indie rnb artist dallas unsigned",
+    "unsigned rnb artist phoenix independent",
+    "independent rapper seattle unsigned",
+    "indie rnb singer birmingham uk",
+    "unsigned artist manchester uk rnb",
+    "independent rnb singer melbourne australia",
+    "unsigned hip hop artist sydney",
+    "indie soul artist dubai unsigned",
+    "rnb artist abu dhabi independent",
+    "unsigned vocalist rnb usa indie",
+    "bedroom pop rnb singer unsigned",
+    "lo fi rnb singer independent usa",
+    "alternative rnb singer unsigned 2024",
+    "melodic rap artist independent usa",
+    "unsigned singing rapper usa 2024",
+    "independent rnb artist no label 2024",
 ]
 
 # ── PRODUCTION NEED SIGNALS ────────────────────────────────────────────────────
@@ -484,7 +513,7 @@ def save(artists, session_id=None):
     headers = {
         "apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
         "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates,return=minimal"
+        "Prefer": "resolution=ignore-duplicates,return=minimal"
     }
     ok = fail = 0
     first_error = None
@@ -602,10 +631,22 @@ def run():
         print("  No new candidates found. All artists already in DB or none passed filters.")
         return
 
+    # ── Score candidates in batches before scanning IG ───────────────────────
+    print(f"\n  Scoring {len(all_candidates)} candidates with Claude...")
+    SCORE_BATCH = 20
+    for b in range(0, len(all_candidates), SCORE_BATCH):
+        score_batch(all_candidates[b:b+SCORE_BATCH])
+        time.sleep(0.5)
+
+    # Filter by min score before spending time on IG scans
+    scoreable = [a for a in all_candidates if (a.get("score") or 0) >= MIN_SCORE]
+    print(f"  Passed score filter (>={MIN_SCORE}): {len(scoreable)} / {len(all_candidates)}")
+    scoreable.sort(key=lambda a: a.get("score") or 0, reverse=True)  # best first
+
     # ── Instagram scan loop — runs until TARGET_LEADS saved ──────────────────
     new_leads = []
 
-    for i, artist in enumerate(all_candidates):
+    for i, artist in enumerate(scoreable):
         if len(new_leads) >= TARGET_LEADS:
             break
 
@@ -616,7 +657,7 @@ def run():
             print(f"  SKIP {artist['name']}: {listeners:,} listeners (over {MAX_LISTENERS:,} cap)")
             continue
 
-        print(f"  [{i+1}/{len(all_candidates)}] {artist['name']} — {listeners:,} listeners")
+        print(f"  [{i+1}/{len(scoreable)}] {artist['name']} — {listeners:,} listeners — score {artist.get('score')}")
         print(f"    Scanning Instagram...")
 
         scan_instagram(artist)
