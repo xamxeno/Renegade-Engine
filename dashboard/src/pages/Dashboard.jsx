@@ -1081,9 +1081,11 @@ function ArtistCard({ artist, onClick, selected, onSelect, batchLabel }) {
   const scoreColor = score >= 70 ? "#4caf50" : score >= 50 ? "#ff9800" : "#666"
 
   return (
-    <div
-      onClick={onClick}
+    <a
+      href={`?artist=${artist.id}`}
+      onClick={e => { e.preventDefault(); onClick() }}
       style={{
+        display: "block", textDecoration: "none",
         background: selected ? "#16162a" : "#111",
         border: selected ? "1.5px solid #ff4d0055" : "0.5px solid #1f1f1f",
         borderRadius: 12, padding: "14px 16px", cursor: "pointer",
@@ -1178,7 +1180,7 @@ function ArtistCard({ artist, onClick, selected, onSelect, batchLabel }) {
           </span>
         )}
       </div>
-    </div>
+    </a>
   )
 }
 

@@ -8,12 +8,23 @@ const AUTH_KEY = "renegade_auth"
 
 export default function App() {
   const [authed, setAuthed] = useState(() => localStorage.getItem(AUTH_KEY) === "1")
-  const [page, setPage] = useState("dashboard")
-  const [selectedId, setSelectedId] = useState(null)
+  const [page, setPage] = useState(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get("artist") ? "artist" : "dashboard"
+  })
+  const [selectedId, setSelectedId] = useState(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get("artist") || null
+  })
 
   const navigate = (p, id = null) => {
     setPage(p)
     setSelectedId(id)
+    if (p === "artist" && id) {
+      window.history.pushState({}, "", `?artist=${id}`)
+    } else {
+      window.history.pushState({}, "", window.location.pathname)
+    }
   }
 
   if (!authed) return <LoginScreen onAuth={() => { localStorage.setItem(AUTH_KEY, "1"); setAuthed(true) }} />
