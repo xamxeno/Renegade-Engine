@@ -1097,14 +1097,19 @@ function ArtistCard({ artist, onClick, selected, onSelect, batchLabel }) {
   const score = artist.score || 0
   const scoreColor = score >= 70 ? "#4caf50" : score >= 50 ? "#ff9800" : "#666"
 
+  const statusGlow = sc.text + "18"
+  const statusBorder = sc.text + "33"
+
   return (
     <a
       href={`?artist=${artist.id}`}
       onClick={e => { e.preventDefault(); onClick() }}
       style={{
         display: "block", textDecoration: "none",
-        background: selected ? "#16162a" : "#111",
-        border: selected ? "1.5px solid #ff4d0055" : "0.5px solid #1f1f1f",
+        background: selected
+          ? `radial-gradient(ellipse at top left, ${sc.text}22 0%, #16162a 60%)`
+          : `radial-gradient(ellipse at top left, ${statusGlow} 0%, #111 55%)`,
+        border: selected ? `1.5px solid #ff4d0055` : `0.5px solid ${statusBorder}`,
         borderRadius: 12, padding: "14px 16px", cursor: "pointer",
         transition: "border-color 0.15s, background 0.15s",
         position: "relative",

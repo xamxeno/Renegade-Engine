@@ -190,8 +190,23 @@ export default function ArtistDetail({ API, id, onBack }) {
   let genres = []
   try { genres = JSON.parse(artist.genres || "[]") } catch {}
 
+  const STATUS_COLORS = {
+    new:       "#6c8cff",
+    contacted: "#4caf50",
+    pitched:   "#ff9800",
+    signed:    "#ff4081",
+    ignored:   "#555"
+  }
+  const statusColor = STATUS_COLORS[status || artist.status] || "#6c8cff"
+
   return (
-    <div style={{ padding: "2rem 2rem calc(2rem + env(safe-area-inset-bottom))", maxWidth: 800, margin: "0 auto" }}>
+    <div style={{
+      padding: "2rem 2rem calc(2rem + env(safe-area-inset-bottom))",
+      maxWidth: 800, margin: "0 auto",
+      minHeight: "100vh",
+      background: `radial-gradient(ellipse at top, ${statusColor}18 0%, transparent 60%)`,
+      transition: "background 0.4s ease"
+    }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
         <button onClick={onBack} style={{
           background: "transparent", border: "0.5px solid #222",
