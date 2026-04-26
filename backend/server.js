@@ -767,8 +767,8 @@ app.post('/api/artists/rescan-all', async (req, res) => {
   }
 })
 
-// POST /api/artists/scan-bios — fetch IG pages for a list of artist IDs and flag producers/DJs
-// Checks bio text AND username for producer/DJ keywords. Does NOT do enrichment.
+// POST /api/artists/scan-bios — fetch IG pages for a list of artist IDs and DELETE producers/DJs
+// Checks bio text AND username for producer/DJ keywords. Hard-deletes matches — does not flag.
 const BIO_SCAN_NAME_KEYWORDS = [
   'dj ','dj-','dj_',' dj ','deejay','disc jockey','turntablist',
   'producer','beat maker','beatmaker','prod by','beats by','beatsmith',
@@ -815,9 +815,9 @@ async function runBioScan(ids) {
     }
 
     if (flagged) {
-      await supabase.from('artists').update({ contact_quality: 'skip', updated_at: new Date().toISOString() }).eq('id', artist.id)
+      await supabase.from('artists').delete().eq('id', artist.id)
       _bioScanStats.flagged++
-      console.log(`[BioScan] Flagged ${artist.name} as producer/DJ`)
+      console.log(`[BioScan] Deleted ${artist.name} — producer/DJ detected`)
     }
     _bioScanStats.processed++
     await new Promise(r => setTimeout(r, 800))

@@ -961,13 +961,13 @@ export default function Dashboard({ API, onSelect }) {
           <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#88cc44", display: "inline-block", animation: "pulse 1.5s infinite", flexShrink: 0 }} />
           <span>Scanning bios — <strong>{bioScanStatus.current}</strong></span>
           <span style={{ color: "#2a4a00", marginLeft: "auto", whiteSpace: "nowrap" }}>
-            {bioScanStatus.processed}/{bioScanStatus.total} · {bioScanStatus.flagged} flagged
+            {bioScanStatus.processed}/{bioScanStatus.total} · {bioScanStatus.flagged} removed
           </span>
         </div>
       )}
       {bioScanStatus && !bioScanStatus.running && bioScanStatus.total > 0 && (
         <div style={{ background: "#0a0f0a", border: "0.5px solid #1a3a00", borderRadius: 8, padding: "8px 14px", marginBottom: "0.5rem", fontSize: 12, color: "#88cc44", display: "flex", alignItems: "center", gap: 10 }}>
-          <span>Bio scan complete — {bioScanStatus.flagged} producers/DJs flagged out of {bioScanStatus.total}</span>
+          <span>Bio scan complete — {bioScanStatus.flagged} producers/DJs removed out of {bioScanStatus.total}</span>
         </div>
       )}
 
