@@ -113,6 +113,27 @@ export default function Dashboard({ API, onSelect }) {
       .catch(() => {})
   }, [spotifyDumpOpen, API])
 
+  const [flaggingSpotify, setFlaggingSpotify] = useState(false)
+  const [confirmFlagSpotify, setConfirmFlagSpotify] = useState(false)
+
+  const flagAllSpotifyLeads = async () => {
+    if (!confirmFlagSpotify) { setConfirmFlagSpotify(true); return }
+    setFlaggingSpotify(true)
+    try {
+      const ids = spotifyLeads.map(a => a.id)
+      await fetch(`${API}/api/artists/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, action: 'delete' })
+      })
+      const flaggedSet = new Set(ids)
+      setArtists(prev => prev.map(a => flaggedSet.has(a.id) ? { ...a, contact_quality: 'skip' } : a))
+      setSpotifyLeads([])
+      setConfirmFlagSpotify(false)
+    } catch {}
+    setFlaggingSpotify(false)
+  }
+
   const syncInstagramJson = async () => {
     setSyncingJson(true)
     try {
@@ -324,7 +345,7 @@ export default function Dashboard({ API, onSelect }) {
         body: JSON.stringify({ ids, action: 'delete' })
       })
       const flaggedSet = new Set(ids)
-      setArtists(prev => prev.filter(a => !flaggedSet.has(a.id)))
+      setArtists(prev => prev.map(a => flaggedSet.has(a.id) ? { ...a, contact_quality: 'skip' } : a))
       clearSelection()
     } catch {}
   }
@@ -457,13 +478,15 @@ export default function Dashboard({ API, onSelect }) {
     batchLabelMap[s.session_id] = isOldest ? "Testing" : `Batch ${sessions.length - i}`
   })
 
-  const verifiedArtists   = sortedArtists.filter(a => a.instagram)
-  const unverifiedArtists = sortedArtists.filter(a => !a.instagram)
+  const verifiedArtists   = sortedArtists.filter(a => a.instagram && a.contact_quality !== 'skip')
+  const unverifiedArtists = sortedArtists.filter(a => !a.instagram && a.contact_quality !== 'skip')
   const inProgressArtists = sortedArtists.filter(a => a.contact_quality === 'verifying' && a.instagram)
+  const flaggedArtists    = sortedArtists.filter(a => a.contact_quality === 'skip')
   const displayedArtists  =
     activeTab === "verified"    ? verifiedArtists :
     activeTab === "unverified"  ? unverifiedArtists :
     activeTab === "inprogress"  ? inProgressArtists :
+    activeTab === "flagged"     ? flaggedArtists :
     sortedArtists
 
   return (
@@ -496,7 +519,7 @@ export default function Dashboard({ API, onSelect }) {
                 style={{ width: "100%", height: 400, background: "#0a0a0a", border: "0.5px solid #222", borderRadius: 8, padding: "12px", color: "#ccc", fontSize: 12, fontFamily: "monospace", resize: "vertical", outline: "none", boxSizing: "border-box" }}
                 onClick={e => e.target.select()}
               />
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                 <button
                   onClick={() => setSpotifyChunk(c => Math.max(0, c - 1))}
                   disabled={spotifyChunk === 0}
@@ -512,6 +535,16 @@ export default function Dashboard({ API, onSelect }) {
                   onClick={() => navigator.clipboard.writeText(chunkText)}
                   style={{ background: "#1DB954", border: "none", borderRadius: 8, padding: "9px 22px", color: "#000", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
                 >Copy Chunk</button>
+              </div>
+              <div style={{ borderTop: "0.5px solid #1a1a1a", paddingTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <span style={{ color: "#444", fontSize: 12 }}>Flag all {spotifyLeads.length} listed leads as junk (moves them to Flagged tab)</span>
+                <button
+                  onClick={flagAllSpotifyLeads}
+                  disabled={flaggingSpotify || spotifyLeads.length === 0}
+                  style={{ background: confirmFlagSpotify ? "#3a0808" : "#1a0808", border: `0.5px solid ${confirmFlagSpotify ? "#ff5555" : "#3a1515"}`, borderRadius: 8, padding: "8px 18px", color: confirmFlagSpotify ? "#ff5555" : "#cc4444", fontSize: 13, fontWeight: confirmFlagSpotify ? 700 : 500, cursor: flaggingSpotify || spotifyLeads.length === 0 ? "default" : "pointer", whiteSpace: "nowrap" }}
+                >
+                  {flaggingSpotify ? "Flagging..." : confirmFlagSpotify ? `Confirm Flag All ${spotifyLeads.length}` : "Flag All Listed"}
+                </button>
               </div>
             </div>
           </div>
@@ -848,6 +881,7 @@ export default function Dashboard({ API, onSelect }) {
           ["all",         "All Leads",          sortedArtists.length],
           ["verified",    "Verified Contacts",  verifiedArtists.length],
           ["unverified",  "Unverified",         unverifiedArtists.length],
+          ["flagged",     "Flagged",            flaggedArtists.length],
           ["inprogress",  "In Progress",        inProgressArtists.length],
         ].map(([tab, label, count]) => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
