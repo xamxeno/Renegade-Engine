@@ -548,7 +548,7 @@ export default function Dashboard({ API, onSelect }) {
         const chunkText = chunk.length === 0 ? "Loading..." : chunk.filter(a => a.profile_url).map(a => `${a.name}: ${a.profile_url}`).join("\n")
         return (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <div style={{ background: "#111", border: "0.5px solid #2a2a2a", borderRadius: 14, padding: "2rem", width: "min(700px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ background: "rgba(17,17,17,0.82)", border: "0.5px solid #2a2a2a", borderRadius: 14, padding: "2rem", width: "min(700px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div>
                   <div style={{ color: "#fff", fontWeight: 600, fontSize: 16 }}>
@@ -601,7 +601,7 @@ export default function Dashboard({ API, onSelect }) {
       {/* ── Discovery Modal ── */}
       {discoveryOpen && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ background: "#0d0d0d", border: "1px solid #2a1a4a", borderRadius: 16, padding: "2rem", width: "min(620px, 92vw)", display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ background: "rgba(13,13,13,0.82)", border: "1px solid #2a1a4a", borderRadius: 16, padding: "2rem", width: "min(620px, 92vw)", display: "flex", flexDirection: "column", gap: 16 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
                 <div style={{ color: "#fff", fontWeight: 700, fontSize: 17, letterSpacing: "-0.02em" }}>Run Discovery</div>
@@ -611,7 +611,7 @@ export default function Dashboard({ API, onSelect }) {
             </div>
 
             {/* Progress bar */}
-            <div style={{ background: "#111", borderRadius: 99, height: 6, overflow: "hidden" }}>
+            <div style={{ background: "rgba(17,17,17,0.82)", borderRadius: 99, height: 6, overflow: "hidden" }}>
               <div style={{ height: "100%", width: `${discoveryProgress}%`, background: "linear-gradient(90deg,#6633ff,#1DB954)", borderRadius: 99, transition: "width 0.4s ease" }} />
             </div>
             <div style={{ color: "#444", fontSize: 11, textAlign: "right", marginTop: -10 }}>{discoveryProgress}%</div>
@@ -649,7 +649,7 @@ export default function Dashboard({ API, onSelect }) {
       {/* ── Paste JSON Sync Panel ── */}
       {pastePanelOpen && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ background: "#111", border: "0.5px solid #2a2a2a", borderRadius: 14, padding: "2rem", width: "min(660px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ background: "rgba(17,17,17,0.82)", border: "0.5px solid #2a2a2a", borderRadius: 14, padding: "2rem", width: "min(660px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
                 <div style={{ color: "#fff", fontWeight: 600, fontSize: 16 }}>Paste Instagram JSON</div>
@@ -694,7 +694,7 @@ export default function Dashboard({ API, onSelect }) {
       {/* ── Flush preview modal ── */}
       {flushPreview && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ background: "#111", border: "0.5px solid #2a2a2a", borderRadius: 14, padding: "2rem", maxWidth: 520, width: "90%" }}>
+          <div style={{ background: "rgba(17,17,17,0.82)", border: "0.5px solid #2a2a2a", borderRadius: 14, padding: "2rem", maxWidth: 520, width: "90%" }}>
             <h2 style={{ color: "#fff", margin: "0 0 6px", fontSize: 18, fontWeight: 600 }}>Flush Junk Leads</h2>
             <p style={{ color: "#666", fontSize: 13, margin: "0 0 16px" }}>
               Permanently removes leads with score &lt; 50, flagged leads, or leads with no contact info.<br/>
@@ -972,7 +972,7 @@ export default function Dashboard({ API, onSelect }) {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search artists..."
-          style={{ flex: 1, minWidth: 200, background: "#111", border: "0.5px solid #222", borderRadius: 8, padding: "8px 12px", color: "#fff", fontSize: 13, outline: "none" }}
+          style={{ flex: 1, minWidth: 200, background: "rgba(17,17,17,0.82)", border: "0.5px solid #222", borderRadius: 8, padding: "8px 12px", color: "#fff", fontSize: 13, outline: "none" }}
         />
         <button
           onClick={() => setSweetSpot(s => !s)}
@@ -982,17 +982,17 @@ export default function Dashboard({ API, onSelect }) {
           {sweetSpot ? "Sweet Spot ON" : "Sweet Spot"}
         </button>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-          style={{ background: "#111", border: "0.5px solid #222", borderRadius: 8, padding: "8px 12px", color: "#888", fontSize: 13 }}>
+          style={{ background: "rgba(17,17,17,0.82)", border: "0.5px solid #222", borderRadius: 8, padding: "8px 12px", color: "#888", fontSize: 13 }}>
           <option value="">All statuses</option>
           {["new","contacted","pitched","signed","ignored"].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <select value={filterPlatform} onChange={e => setFilterPlatform(e.target.value)}
-          style={{ background: "#111", border: "0.5px solid #222", borderRadius: 8, padding: "8px 12px", color: "#888", fontSize: 13 }}>
+          style={{ background: "rgba(17,17,17,0.82)", border: "0.5px solid #222", borderRadius: 8, padding: "8px 12px", color: "#888", fontSize: 13 }}>
           <option value="">All platforms</option>
           <option value="spotify">Spotify</option>
         </select>
         <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-          style={{ background: "#111", border: "0.5px solid #222", borderRadius: 8, padding: "8px 12px", color: "#ccc", fontSize: 13 }}>
+          style={{ background: "rgba(17,17,17,0.82)", border: "0.5px solid #222", borderRadius: 8, padding: "8px 12px", color: "#ccc", fontSize: 13 }}>
           <option value="score">Sort: Score</option>
           <option value="listeners">Sort: Listeners</option>
           <option value="followers">Sort: Followers</option>
@@ -1001,7 +1001,7 @@ export default function Dashboard({ API, onSelect }) {
         </select>
         <button onClick={() => setSortDir(d => d === "desc" ? "asc" : "desc")}
           title={sortDir === "desc" ? "High → Low" : "Low → High"}
-          style={{ background: "#111", border: "0.5px solid #222", borderRadius: 8, padding: "8px 12px", color: "#888", fontSize: 14, cursor: "pointer", minWidth: 38, textAlign: "center" }}>
+          style={{ background: "rgba(17,17,17,0.82)", border: "0.5px solid #222", borderRadius: 8, padding: "8px 12px", color: "#888", fontSize: 14, cursor: "pointer", minWidth: 38, textAlign: "center" }}>
           {sortDir === "desc" ? "↓" : "↑"}
         </button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, opacity: sweetSpot ? 0.3 : 1 }}>
@@ -1013,7 +1013,7 @@ export default function Dashboard({ API, onSelect }) {
         <select
           value={filterSession}
           onChange={e => setFilterSession(e.target.value)}
-          style={{ background: "#111", border: "0.5px solid #222", borderRadius: 8, padding: "8px 12px", color: "#888", fontSize: 13, maxWidth: 180 }}
+          style={{ background: "rgba(17,17,17,0.82)", border: "0.5px solid #222", borderRadius: 8, padding: "8px 12px", color: "#888", fontSize: 13, maxWidth: 180 }}
         >
           <option value="">All Batches</option>
           {sessions.map((s, i) => {
