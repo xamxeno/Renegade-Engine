@@ -1162,7 +1162,8 @@ export default function Dashboard({ API, onSelect }) {
 }
 
 function ArtistCard({ artist, onClick, selected, onSelect, batchLabel }) {
-  const sc = STATUS_COLORS[artist.status] || STATUS_COLORS.new
+  const isFlagged = artist.contact_quality === 'skip'
+  const sc = isFlagged ? { bg: "#2a0808", text: "#cc3333" } : (STATUS_COLORS[artist.status] || STATUS_COLORS.new)
   const score = artist.score || 0
   const scoreColor = score >= 70 ? "#4caf50" : score >= 50 ? "#ff9800" : "#666"
 
@@ -1247,7 +1248,7 @@ function ArtistCard({ artist, onClick, selected, onSelect, batchLabel }) {
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         <span style={{ background: sc.bg, color: sc.text, fontSize: 11, padding: "3px 8px", borderRadius: 4 }}>
-          {artist.status}
+          {isFlagged ? "flagged" : artist.status}
         </span>
         {artist.instagram && (
           <span style={{ background: "#1a1a2a", color: "#8888ff", fontSize: 11, padding: "3px 8px", borderRadius: 4 }}>
