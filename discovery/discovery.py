@@ -71,6 +71,11 @@ JUNK_KEYWORDS = [
     "unsigned artists","indie artists","independent artists",
     "podcast","radio show","radio host","cover artist","music blog",
     "music network","music community","sound healing","music therapy",
+    # Generic/placeholder names that Spotify returns from keyword searches
+    "unsigned","untitled","unspecified","unknown","unnamed","no name",
+    "artist","rapper","singer","vocalist","musician","performer",
+    "independent","indie artist","new artist","emerging artist",
+    "upcoming artist","rising artist","unsigned artist",
 ]
 
 PRODUCER_NAME_PATTERNS = [
