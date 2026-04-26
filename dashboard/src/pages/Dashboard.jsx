@@ -491,7 +491,15 @@ export default function Dashboard({ API, onSelect }) {
     return below / (vals.length - 1)
   }
 
+  const STATUS_ORDER = { new: 0, contacted: 1, pitched: 2, signed: 3, ignored: 4 }
+
   const sortedArtists = [...filtered].sort((a, b) => {
+    // Primary: status priority
+    const sa = STATUS_ORDER[a.status] ?? 0
+    const sb = STATUS_ORDER[b.status] ?? 0
+    if (sa !== sb) return sa - sb
+
+    // Secondary: user-selected sort
     if (sortBy === "name") {
       const cmp = (a.name || "").localeCompare(b.name || "")
       return sortDir === "asc" ? cmp : -cmp
@@ -1106,7 +1114,7 @@ function ArtistCard({ artist, onClick, selected, onSelect, batchLabel }) {
     >
       {/* Selection checkbox */}
       <div
-        onClick={onSelect}
+        onClick={e => { e.preventDefault(); e.stopPropagation(); onSelect(e) }}
         title={selected ? "Deselect" : "Select"}
         style={{
           position: "absolute", top: 10, left: 10,
