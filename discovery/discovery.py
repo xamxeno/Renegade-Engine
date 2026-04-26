@@ -632,7 +632,7 @@ def run():
         print("  No new candidates found. All artists already in DB or none passed filters.")
         return
 
-    # ── Instagram scan loop — runs until TARGET_LEADS saved ──────────────────
+    # ── Collect leads up to TARGET_LEADS (no IG scan — worker handles that) ───
     new_leads = []
 
     for i, artist in enumerate(all_candidates):
@@ -641,40 +641,27 @@ def run():
 
         listeners = artist.get("listeners") or artist.get("followers") or 0
 
-        # Hard cap — skip immediately, don't even scan IG
         if listeners > MAX_LISTENERS:
-            print(f"  SKIP {artist['name']}: {listeners:,} listeners (over {MAX_LISTENERS:,} cap)")
             continue
 
-        print(f"  [{i+1}/{len(all_candidates)}] {artist['name']} — {listeners:,} listeners")
-        print(f"    Scanning Instagram...")
-
-        scan_instagram(artist)
-
-        status = "OK IG found" if artist.get("instagram") else "- contactless"
-        print(f"    {status} — Lead #{len(new_leads)+1}/{TARGET_LEADS} saved")
+        artist["contact_quality"] = "none"  # worker will pick up and enrich
+        print(f"  [{len(new_leads)+1}/{TARGET_LEADS}] {artist['name']} — {listeners:,} listeners")
         new_leads.append(artist)
-        time.sleep(0.5)
-
-    # ── Summary ───────────────────────────────────────────────────────────────
-    found_ig    = sum(1 for a in new_leads if a.get("instagram"))
-    contactless = sum(1 for a in new_leads if not a.get("instagram"))
 
     print(f"\n{'='*60}")
-    print(f"  SCAN COMPLETE")
-    print(f"  New leads saved  : {len(new_leads)}")
-    print(f"  Instagram found  : {found_ig}")
-    print(f"  Contactless      : {contactless}")
+    print(f"  DISCOVERY COMPLETE")
+    print(f"  New leads found  : {len(new_leads)}")
+    print(f"  IG enrichment    : background worker will handle")
     print(f"{'='*60}")
 
     if not new_leads:
-        print("  No new leads found.")
+        print("  No new candidates found.")
         return
 
-    # ── Save unscored leads to dashboard now ──────────────────────────────────
-    print(f"\n  Saving {len(new_leads)} leads to dashboard (unscored)...")
+    # ── Save leads to dashboard — enrichment worker picks them up ────────────
+    print(f"\n  Saving {len(new_leads)} leads to dashboard...")
     save(new_leads, session_id)
-    print(f"  Leads are live. Open New Search tab in dashboard.")
+    print(f"  Leads are live. Enrichment worker will find Instagrams automatically.")
 
     # ── Claude scoring ────────────────────────────────────────────────────────
     print(f"\n{'='*60}")
@@ -712,9 +699,8 @@ def run():
         print(f"  {'Score':<7} {'Name':<28} {'IG':<22} {'Listeners':<12} {'Genres'}")
         print("  " + "─"*75)
         for a in qualified[:20]:
-            ig    = f"@{a['instagram']}" if a.get("instagram") else "—"
             genre = ", ".join(a.get("genres", [])[:2]) or "—"
-            print(f"  [{a['score']:>3}]  {a['name']:<28} {ig:<22} {str(a.get('listeners',0)):<12} {genre}")
+            print(f"  [{a['score']:>3}]  {a['name']:<28} {str(a.get('listeners',0)):<12} {genre}")
 
         print(f"\n  Updating dashboard with scores...")
         save(qualified, session_id)
