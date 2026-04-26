@@ -29,7 +29,14 @@ const IG_PRODUCER_KEYWORDS = [
   'audio engineer','sound engineer','fl studio','ableton','logic pro',
   'prod by','beats by','trap producer','rnb producer','hip hop producer',
   'record producer','music producer','executive producer','beatsmith',
-  'recording engineer','sound designer','instrumental'
+  'recording engineer','sound designer','instrumental',
+  'dj ','deejay','disc jockey','turntablist','drum and bass producer',
+  'dnb producer','d&b producer','house producer','edm producer',
+  'techno producer','dubstep producer','garage producer',
+  'sound engineer','foley artist','composer','film composer','music composer',
+  'songwriter for hire','ghostwriter','session musician','session guitarist',
+  'session bassist','session drummer','live sound','front of house',
+  'studio engineer','tracking engineer','mix engineer'
 ]
 
 function fetchIGPage (handle) {

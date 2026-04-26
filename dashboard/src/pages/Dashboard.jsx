@@ -14,12 +14,12 @@ export default function Dashboard({ API, onSelect }) {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [filterStatus, setFilterStatus] = useState("")
-  const [filterPlatform, setFilterPlatform] = useState("")
-  const [minScore, setMinScore] = useState(0)
-  const [sweetSpot, setSweetSpot] = useState(false)
-  const [sortBy, setSortBy] = useState("listeners")
-  const [sortDir, setSortDir] = useState("asc")
-  const [activeTab, setActiveTab] = useState("all")
+  const [filterPlatform, setFilterPlatform] = useState(() => sessionStorage.getItem("re_platform") || "")
+  const [minScore, setMinScore] = useState(() => Number(sessionStorage.getItem("re_minScore") || 0))
+  const [sweetSpot, setSweetSpot] = useState(() => sessionStorage.getItem("re_sweetSpot") === "1")
+  const [sortBy, setSortBy] = useState(() => sessionStorage.getItem("re_sortBy") || "listeners")
+  const [sortDir, setSortDir] = useState(() => sessionStorage.getItem("re_sortDir") || "asc")
+  const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem("re_tab") || "all")
   const [flushing, setFlushing] = useState(false)
   const [flushPreview, setFlushPreview] = useState(null)
   const [enrichStatus, setEnrichStatus] = useState(null)
@@ -97,6 +97,14 @@ export default function Dashboard({ API, onSelect }) {
 
   // Immediate refetch on filter changes
   useEffect(() => { fetchArtists() }, [filterStatus, filterPlatform, filterSession, minScore, sweetSpot, activeTab])
+
+  // Persist filter/tab state so back-navigation restores them
+  useEffect(() => { sessionStorage.setItem("re_tab", activeTab) }, [activeTab])
+  useEffect(() => { sessionStorage.setItem("re_platform", filterPlatform) }, [filterPlatform])
+  useEffect(() => { sessionStorage.setItem("re_minScore", minScore) }, [minScore])
+  useEffect(() => { sessionStorage.setItem("re_sweetSpot", sweetSpot ? "1" : "0") }, [sweetSpot])
+  useEffect(() => { sessionStorage.setItem("re_sortBy", sortBy) }, [sortBy])
+  useEffect(() => { sessionStorage.setItem("re_sortDir", sortDir) }, [sortDir])
 
   // Load sessions once on mount
   useEffect(() => { loadSessions() }, [loadSessions])
@@ -508,6 +516,7 @@ export default function Dashboard({ API, onSelect }) {
     batchLabelMap[s.session_id] = isOldest ? "Testing" : `Batch ${sessions.length - i}`
   })
 
+  const allLeads          = sortedArtists.filter(a => a.contact_quality !== 'skip')
   const verifiedArtists   = sortedArtists.filter(a => a.instagram && a.contact_quality !== 'skip')
   const unverifiedArtists = sortedArtists.filter(a => !a.instagram && a.contact_quality !== 'skip')
   const inProgressArtists = sortedArtists.filter(a => a.contact_quality === 'verifying' && a.instagram)
@@ -517,7 +526,7 @@ export default function Dashboard({ API, onSelect }) {
     activeTab === "unverified"  ? unverifiedArtists :
     activeTab === "inprogress"  ? inProgressArtists :
     activeTab === "flagged"     ? flaggedArtists :
-    sortedArtists
+    allLeads
 
   return (
     <div style={{ padding: "2rem 2rem calc(2rem + env(safe-area-inset-bottom))", maxWidth: 1280, margin: "0 auto", minHeight: "100vh", background: "radial-gradient(ellipse at top, #0d0a1a 0%, #050505 60%)" }}>
@@ -926,7 +935,7 @@ export default function Dashboard({ API, onSelect }) {
       {/* ── Tabs ── */}
       <div style={{ display: "flex", gap: 4, marginBottom: "1rem", borderBottom: "0.5px solid #1f1f1f", paddingBottom: 0, flexWrap: "wrap" }}>
         {[
-          ["all",         "All Leads",          sortedArtists.length],
+          ["all",         "All Leads",          allLeads.length],
           ["verified",    "Verified Contacts",  verifiedArtists.length],
           ["unverified",  "Unverified",         unverifiedArtists.length],
           ["flagged",     "Flagged",            flaggedArtists.length],
@@ -1101,17 +1110,17 @@ function ArtistCard({ artist, onClick, selected, onSelect, batchLabel }) {
         title={selected ? "Deselect" : "Select"}
         style={{
           position: "absolute", top: 10, left: 10,
-          width: 17, height: 17, borderRadius: 4,
+          width: 26, height: 26, borderRadius: 6,
           border: selected ? "none" : "1.5px solid #2e2e2e",
           background: selected ? "#ff4d00" : "rgba(0,0,0,0.5)",
           cursor: "pointer", display: "flex", alignItems: "center",
           justifyContent: "center", zIndex: 2, flexShrink: 0,
         }}
       >
-        {selected && <span style={{ color: "#fff", fontSize: 10, lineHeight: 1, fontWeight: 700 }}>✓</span>}
+        {selected && <span style={{ color: "#fff", fontSize: 14, lineHeight: 1, fontWeight: 700 }}>✓</span>}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, paddingLeft: 26 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, paddingLeft: 36 }}>
         {artist.image_url ? (
           <img src={artist.image_url} alt={artist.name}
             style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
