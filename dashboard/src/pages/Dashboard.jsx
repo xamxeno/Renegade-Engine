@@ -45,8 +45,13 @@ export default function Dashboard({ API, onSelect }) {
   const [spotifyChunk, setSpotifyChunk] = useState(0)
   const [syncingJson, setSyncingJson] = useState(false)
   const [pastePanelOpen, setPastePanelOpen] = useState(false)
+  const [pasteTab, setPasteTab] = useState("json") // "json" | "manual"
   const [pasteText, setPasteText] = useState("")
   const [pasteResult, setPasteResult] = useState(null)
+  const [manualUrl, setManualUrl] = useState("")
+  const [manualIG, setManualIG] = useState("")
+  const [addingManual, setAddingManual] = useState(false)
+  const [manualResult, setManualResult] = useState(null)
   const [discoveryOpen, setDiscoveryOpen] = useState(false)
   const [discoveryRunning, setDiscoveryRunning] = useState(false)
   const [discoveryLog, setDiscoveryLog] = useState([])
@@ -191,6 +196,33 @@ export default function Dashboard({ API, onSelect }) {
       }
     } catch { setPasteResult({ error: 'Server unreachable' }) }
     setSyncingJson(false)
+  }
+
+  const addManualLead = async () => {
+    if (!manualUrl.trim()) return
+    setAddingManual(true)
+    setManualResult(null)
+    try {
+      const r = await fetch(`${API}/api/artists/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          profile_url: manualUrl.trim(),
+          instagram: manualIG.trim() || undefined,
+          session_id: 'manual_searched'
+        })
+      })
+      const d = await r.json()
+      if (d.error) setManualResult({ error: d.error })
+      else {
+        setManualResult({ ok: true, name: d.artist?.name, exists: d.already_exists })
+        setManualUrl("")
+        setManualIG("")
+        fetchArtists()
+        loadSessions()
+      }
+    } catch { setManualResult({ error: 'Server unreachable' }) }
+    setAddingManual(false)
   }
 
   const runDiscovery = async () => {
@@ -694,47 +726,90 @@ export default function Dashboard({ API, onSelect }) {
         </div>
       )}
 
-      {/* ── Paste JSON Sync Panel ── */}
+      {/* ── Paste / Add Lead Panel ── */}
       {pastePanelOpen && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ background: "rgba(17,17,17,0.82)", border: "0.5px solid #2a2a2a", borderRadius: 14, padding: "2rem", width: "min(660px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ background: "rgba(17,17,17,0.93)", border: "0.5px solid #2a2a2a", borderRadius: 14, padding: "2rem", width: "min(660px, 92vw)", display: "flex", flexDirection: "column", gap: 14 }}>
+
+            {/* Header */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div>
-                <div style={{ color: "#fff", fontWeight: 600, fontSize: 16 }}>Paste Instagram JSON</div>
-                <div style={{ color: "#555", fontSize: 12, marginTop: 3 }}>Paste a JSON array from Claude — leads get marked verified or contactless instantly</div>
-              </div>
-              <button onClick={() => { setPastePanelOpen(false); setPasteText(""); setPasteResult(null) }} style={{ background: "transparent", border: "none", color: "#555", fontSize: 22, cursor: "pointer" }}>×</button>
+              <div style={{ color: "#fff", fontWeight: 600, fontSize: 16 }}>Add Leads</div>
+              <button onClick={() => { setPastePanelOpen(false); setPasteText(""); setPasteResult(null); setManualResult(null) }} style={{ background: "transparent", border: "none", color: "#555", fontSize: 22, cursor: "pointer" }}>×</button>
             </div>
 
-            <div style={{ background: "#0a0a0a", border: "0.5px solid #1a1a1a", borderRadius: 8, padding: "10px 12px" }}>
-              <div style={{ color: "#444", fontSize: 11, marginBottom: 6, fontFamily: "monospace" }}>Expected format:</div>
-              <div style={{ color: "#555", fontSize: 11, fontFamily: "monospace", lineHeight: 1.6 }}>
-                {`[`}<br/>
-                {`  { "name": "Artist Name", "spotify_url": "https://open.spotify.com/artist/...", "instagram": "handle" },`}<br/>
-                {`  { "name": "No IG Artist", "spotify_url": "https://...", "instagram": null }`}<br/>
-                {`]`}
-              </div>
+            {/* Tabs */}
+            <div style={{ display: "flex", gap: 6 }}>
+              {[["manual", "Add Lead"], ["json", "Instagram JSON"]].map(([tab, label]) => (
+                <button key={tab} onClick={() => { setPasteTab(tab); setPasteResult(null); setManualResult(null) }}
+                  style={{ background: pasteTab === tab ? "#1a1a2e" : "transparent", border: `0.5px solid ${pasteTab === tab ? "#4433aa" : "#222"}`, borderRadius: 8, padding: "7px 16px", color: pasteTab === tab ? "#9966ff" : "#555", fontSize: 13, fontWeight: pasteTab === tab ? 600 : 400, cursor: "pointer" }}>
+                  {label}
+                </button>
+              ))}
             </div>
 
-            <textarea
-              value={pasteText}
-              onChange={e => { setPasteText(e.target.value); setPasteResult(null) }}
-              placeholder="Paste your JSON array here..."
-              style={{ width: "100%", height: 280, background: "#0a0a0a", border: "0.5px solid #222", borderRadius: 8, padding: "12px", color: "#ccc", fontSize: 12, fontFamily: "monospace", resize: "vertical", outline: "none", boxSizing: "border-box" }}
-            />
-
-            {pasteResult && (
-              <div style={{ background: pasteResult.error ? "#1a0808" : "#0a1a0a", border: `0.5px solid ${pasteResult.error ? "#3a1515" : "#1a3a1a"}`, borderRadius: 8, padding: "10px 14px", fontSize: 13, color: pasteResult.error ? "#f44336" : "#4caf50" }}>
-                {pasteResult.error ? pasteResult.error : `Synced ${pasteResult.updated} leads — ${pasteResult.queued ?? 0} queued for IG verification. Watch the progress bar at the top.`}
-              </div>
+            {/* ── Add Lead tab ── */}
+            {pasteTab === "manual" && (
+              <>
+                <div style={{ color: "#555", fontSize: 12 }}>Paste a Spotify artist URL — it gets saved in the <strong style={{ color: "#888" }}>Manual Searched</strong> batch. Add their IG handle if you know it.</div>
+                <input
+                  value={manualUrl}
+                  onChange={e => { setManualUrl(e.target.value); setManualResult(null) }}
+                  placeholder="https://open.spotify.com/artist/..."
+                  style={{ width: "100%", background: "#0a0a0a", border: "0.5px solid #222", borderRadius: 8, padding: "11px 14px", color: "#ccc", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                />
+                <input
+                  value={manualIG}
+                  onChange={e => { setManualIG(e.target.value); setManualResult(null) }}
+                  placeholder="Instagram handle (optional, no @)"
+                  style={{ width: "100%", background: "#0a0a0a", border: "0.5px solid #222", borderRadius: 8, padding: "11px 14px", color: "#ccc", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                />
+                {manualResult && (
+                  <div style={{ background: manualResult.error ? "#1a0808" : "#0a1a0a", border: `0.5px solid ${manualResult.error ? "#3a1515" : "#1a3a1a"}`, borderRadius: 8, padding: "10px 14px", fontSize: 13, color: manualResult.error ? "#f44336" : "#4caf50" }}>
+                    {manualResult.error ? manualResult.error : manualResult.exists ? `Already in your leads — ${manualResult.name}` : `Added: ${manualResult.name} → Manual Searched batch`}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                  <button onClick={() => { setPastePanelOpen(false); setManualResult(null) }} style={{ background: "#1a1a1a", border: "0.5px solid #333", borderRadius: 8, padding: "9px 20px", color: "#888", fontSize: 13, cursor: "pointer" }}>Close</button>
+                  <button onClick={addManualLead} disabled={addingManual || !manualUrl.trim()} style={{ background: addingManual || !manualUrl.trim() ? "#111" : "#9966ff", border: "none", borderRadius: 8, padding: "9px 24px", color: addingManual || !manualUrl.trim() ? "#333" : "#fff", fontSize: 13, fontWeight: 700, cursor: addingManual || !manualUrl.trim() ? "default" : "pointer" }}>
+                    {addingManual ? "Adding..." : "Add Lead"}
+                  </button>
+                </div>
+              </>
             )}
 
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <button onClick={() => { setPastePanelOpen(false); setPasteText(""); setPasteResult(null) }} style={{ background: "#1a1a1a", border: "0.5px solid #333", borderRadius: 8, padding: "9px 20px", color: "#888", fontSize: 13, cursor: "pointer" }}>Close</button>
-              <button onClick={syncPastedJson} disabled={syncingJson || !pasteText.trim()} style={{ background: syncingJson ? "#111" : "#9966ff", border: "none", borderRadius: 8, padding: "9px 22px", color: syncingJson ? "#333" : "#fff", fontSize: 13, fontWeight: 700, cursor: syncingJson || !pasteText.trim() ? "default" : "pointer" }}>
-                {syncingJson ? "Syncing..." : "Sync to Leads"}
-              </button>
-            </div>
+            {/* ── Instagram JSON tab ── */}
+            {pasteTab === "json" && (
+              <>
+                <div style={{ color: "#555", fontSize: 12 }}>Paste a JSON array from Claude — leads get marked verified or contactless instantly</div>
+                <div style={{ background: "#0a0a0a", border: "0.5px solid #1a1a1a", borderRadius: 8, padding: "10px 12px" }}>
+                  <div style={{ color: "#444", fontSize: 11, marginBottom: 6, fontFamily: "monospace" }}>Expected format:</div>
+                  <div style={{ color: "#555", fontSize: 11, fontFamily: "monospace", lineHeight: 1.6 }}>
+                    {`[`}<br/>
+                    {`  { "name": "Artist Name", "spotify_url": "https://open.spotify.com/artist/...", "instagram": "handle" },`}<br/>
+                    {`  { "name": "No IG Artist", "spotify_url": "https://...", "instagram": null }`}<br/>
+                    {`]`}
+                  </div>
+                </div>
+                <textarea
+                  value={pasteText}
+                  onChange={e => { setPasteText(e.target.value); setPasteResult(null) }}
+                  placeholder="Paste your JSON array here..."
+                  style={{ width: "100%", height: 240, background: "#0a0a0a", border: "0.5px solid #222", borderRadius: 8, padding: "12px", color: "#ccc", fontSize: 12, fontFamily: "monospace", resize: "vertical", outline: "none", boxSizing: "border-box" }}
+                />
+                {pasteResult && (
+                  <div style={{ background: pasteResult.error ? "#1a0808" : "#0a1a0a", border: `0.5px solid ${pasteResult.error ? "#3a1515" : "#1a3a1a"}`, borderRadius: 8, padding: "10px 14px", fontSize: 13, color: pasteResult.error ? "#f44336" : "#4caf50" }}>
+                    {pasteResult.error ? pasteResult.error : `Synced ${pasteResult.updated} leads — ${pasteResult.queued ?? 0} queued for IG verification.`}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                  <button onClick={() => { setPastePanelOpen(false); setPasteText(""); setPasteResult(null) }} style={{ background: "#1a1a1a", border: "0.5px solid #333", borderRadius: 8, padding: "9px 20px", color: "#888", fontSize: 13, cursor: "pointer" }}>Close</button>
+                  <button onClick={syncPastedJson} disabled={syncingJson || !pasteText.trim()} style={{ background: syncingJson || !pasteText.trim() ? "#111" : "#9966ff", border: "none", borderRadius: 8, padding: "9px 22px", color: syncingJson || !pasteText.trim() ? "#333" : "#fff", fontSize: 13, fontWeight: 700, cursor: syncingJson || !pasteText.trim() ? "default" : "pointer" }}>
+                    {syncingJson ? "Syncing..." : "Sync to Leads"}
+                  </button>
+                </div>
+              </>
+            )}
+
           </div>
         </div>
       )}

@@ -9,10 +9,46 @@ for _pkg in ['requests', 'python-dotenv']:
     try: __import__(_pkg.replace('-', '_').split('.')[0])
     except ImportError: subprocess.check_call([sys.executable, '-m', 'pip', 'install', _pkg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-import os, json, time, re, requests, io
+import os, json, time, re, requests, io, random
 from datetime import datetime
 from base64 import b64encode
 from dotenv import load_dotenv
+
+KEYWORD_STATS_FILE = os.path.join(os.path.dirname(__file__), "keyword_stats.json")
+
+def load_keyword_stats():
+    try:
+        with open(KEYWORD_STATS_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_keyword_stats(stats):
+    try:
+        with open(KEYWORD_STATS_FILE, "w") as f:
+            json.dump(stats, f, indent=2)
+    except:
+        pass
+
+def weighted_shuffle(keywords, stats):
+    """Shuffle keywords but bias toward ones that historically find more artists."""
+    def weight(kw):
+        s = stats.get(kw, {})
+        runs = s.get("runs", 0)
+        hits = s.get("hits", 0)
+        # New keywords get a neutral weight of 1.0
+        if runs == 0:
+            return 1.0
+        avg = hits / runs
+        # Score 0–3: low performers get 0.3, high performers get 3.0
+        return max(0.3, min(3.0, 0.5 + avg * 1.5))
+
+    weights = [weight(kw) for kw in keywords]
+    # Weighted random sort — shuffle with probability proportional to weight
+    paired = list(zip(weights, keywords))
+    random.shuffle(paired)
+    paired.sort(key=lambda x: x[0] + random.random() * 0.5, reverse=True)
+    return [kw for _, kw in paired]
 
 # Force UTF-8 output on Windows terminals
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
@@ -620,13 +656,27 @@ def run():
 
     print("\n[1/1] Spotify...")
     if SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET:
-        for i, query in enumerate(SPOTIFY_KEYWORD_SEARCHES, 1):
+        kw_stats = load_keyword_stats()
+        ordered_queries = weighted_shuffle(SPOTIFY_KEYWORD_SEARCHES, kw_stats)
+        for i, query in enumerate(ordered_queries, 1):
+            before = len(all_candidates)
             found = spotify_keyword_search(query)
-            if found:
-                print(f"  [{i}/{len(SPOTIFY_KEYWORD_SEARCHES)}] '{query}' -> {len(found)} artists")
             add(found)
+            after = len(all_candidates)
+            new_hits = after - before
+            # Track performance
+            s = kw_stats.setdefault(query, {"runs": 0, "hits": 0})
+            s["runs"] += 1
+            s["hits"] += new_hits
+            if new_hits:
+                print(f"  [{i}/{len(ordered_queries)}] '{query}' -> {new_hits} new")
             time.sleep(0.3)
-        print(f"  Spotify candidates so far: {len(all_candidates)}")
+            # Stop searching once we have enough candidates
+            if len(all_candidates) >= TARGET_LEADS * 3:
+                print(f"  Enough candidates ({len(all_candidates)}) — skipping remaining keywords")
+                break
+        save_keyword_stats(kw_stats)
+        print(f"  Spotify candidates: {len(all_candidates)}")
     else:
         print("  SKIPPED — add SPOTIFY_CLIENT_ID + SPOTIFY_CLIENT_SECRET to .env")
 

@@ -171,7 +171,7 @@ let _listenerRefresh = { busy: false, current: null, processed: 0, total: 0, upd
 
 // POST /api/artists/add — manually insert a single artist by Spotify URL; auto-enrich picks it up
 app.post('/api/artists/add', async (req, res) => {
-  const { profile_url, name: manualName } = req.body
+  const { profile_url, name: manualName, instagram, session_id: customSession } = req.body
   if (!profile_url) return res.status(400).json({ error: 'profile_url required' })
   const m = profile_url.match(/open\.spotify\.com\/artist\/([A-Za-z0-9]+)/)
   if (!m) return res.status(400).json({ error: 'Only Spotify artist URLs supported' })
@@ -209,16 +209,31 @@ app.post('/api/artists/add', async (req, res) => {
     return res.json({ success: true, artist: existing, already_exists: true })
   }
 
-  const { data, error } = await supabase.from('artists').upsert({
+  const sessionId = customSession || 'manual_searched'
+  const payload = {
     name, platform: 'spotify', platform_id,
     profile_url: `https://open.spotify.com/artist/${platform_id}`,
     listeners: listeners || null,
-    followers: 0, contact_quality: 'none',
-    status: 'new', discovered_at: new Date().toISOString(), updated_at: new Date().toISOString()
-  }, { onConflict: 'platform,platform_id' }).select().single()
+    followers: 0, contact_quality: instagram ? 'verifying' : 'none',
+    status: 'new', session_id: sessionId,
+    discovered_at: new Date().toISOString(), updated_at: new Date().toISOString()
+  }
+  if (instagram) payload.instagram = instagram.replace(/^@/, '').trim()
+
+  const { data, error } = await supabase.from('artists').upsert(payload, { onConflict: 'platform,platform_id' }).select().single()
 
   if (error) return res.status(500).json({ error: error.message })
-  if (!_enrichBusy) setTimeout(autoEnrichWorker, 100)
+
+  // If IG handle provided, queue for bio verification immediately
+  if (instagram && data) {
+    const handle = instagram.replace(/^@/, '').trim()
+    _verifyQueue.push({ id: data.id, handle, name: data.name })
+    _verifyStats.total++
+    if (!_verifyBusy) verifyWorker()
+  } else if (!_enrichBusy) {
+    setTimeout(autoEnrichWorker, 100)
+  }
+
   res.json({ success: true, artist: data })
 })
 
