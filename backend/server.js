@@ -73,12 +73,23 @@ function parseIGPage (html) {
   return { followers, bio }
 }
 
+async function fetchSpotifyBio (profileUrl) {
+  if (!profileUrl || !profileUrl.includes('spotify.com')) return ''
+  try {
+    const r = await fetch(profileUrl, { headers: { 'User-Agent': 'Twitterbot/1.0' }, signal: AbortSignal.timeout(10000) })
+    const html = await r.text()
+    const m = html.match(/<meta[^>]+property="og:description"[^>]+content="([^"]+)"/i)
+      || html.match(/<meta[^>]+content="([^"]+)"[^>]+property="og:description"/i)
+    return m ? m[1].toLowerCase() : ''
+  } catch { return '' }
+}
+
 async function verifyWorker () {
   if (_verifyBusy || _verifyQueue.length === 0) return
   _verifyBusy = true
 
   while (_verifyQueue.length > 0) {
-    const { id, handle, name } = _verifyQueue.shift()
+    const { id, handle, name, profile_url } = _verifyQueue.shift()
     _verifyStats.current = name
     console.log(`[Verify] ${name} @${handle} — checking IG...`)
 
@@ -93,16 +104,22 @@ async function verifyWorker () {
       const updates = { updated_at: new Date().toISOString() }
       if (followers !== null) updates.ig_followers = followers
 
-      // Instagram blocks most plain fetches — if we got nothing, trust the manually-pasted handle
       if (!html || html.length < 500) {
-        quality = 'verified'
-        console.log(`[Verify] ${name} @${handle} — IG blocked, trusting manual handle`)
+        // IG blocked — fall back to Spotify bio check before trusting the handle
+        const spotifyBio = profile_url ? await fetchSpotifyBio(profile_url) : ''
+        if (spotifyBio && IG_PRODUCER_KEYWORDS.some(kw => spotifyBio.includes(kw))) {
+          quality = 'skip'
+          console.log(`[Verify] ${name} — producer detected in Spotify bio (IG blocked)`)
+        } else {
+          quality = 'verified'
+          console.log(`[Verify] ${name} @${handle} — IG blocked, trusting handle`)
+        }
       } else if (followers !== null && followers > 500000) {
         quality = 'skip'
         console.log(`[Verify] ${name} — too large (${followers.toLocaleString()} followers)`)
       } else if (bio && IG_PRODUCER_KEYWORDS.some(kw => bio.includes(kw))) {
         quality = 'skip'
-        console.log(`[Verify] ${name} — producer detected in bio`)
+        console.log(`[Verify] ${name} — producer detected in IG bio`)
       } else {
         console.log(`[Verify] ${name} @${handle} — VERIFIED (${followers?.toLocaleString() ?? '?'} followers)`)
       }
@@ -890,25 +907,29 @@ const BIO_SCAN_NAME_KEYWORDS = [
 
 let _bioScanStats = { total: 0, processed: 0, flagged: 0, current: null, running: false }
 
+
 async function runBioScan(ids) {
   _bioScanStats = { total: ids.length, processed: 0, flagged: 0, current: null, running: true }
   console.log(`[BioScan] Starting scan of ${ids.length} artists`)
 
-  const { data: artists, error } = await supabase.from('artists').select('id,name,instagram').in('id', ids)
+  const { data: artists, error } = await supabase.from('artists').select('id,name,instagram,profile_url,platform').in('id', ids)
   if (error || !artists) { _bioScanStats.running = false; return }
 
   for (const artist of artists) {
     _bioScanStats.current = artist.name
     const handle = (artist.instagram || '').trim()
     let flagged = false
+    let source = ''
 
-    // Check username itself for producer/DJ keywords
+    // 1. Check username itself
     if (handle) {
       const lhandle = handle.toLowerCase()
-      flagged = BIO_SCAN_NAME_KEYWORDS.some(kw => lhandle.includes(kw.trim()))
+      if (BIO_SCAN_NAME_KEYWORDS.some(kw => lhandle.includes(kw.trim()))) {
+        flagged = true; source = 'username'
+      }
     }
 
-    // Fetch IG bio if not already flagged by username
+    // 2. Try IG bio
     if (!flagged && handle) {
       try {
         const html = await Promise.race([
@@ -917,15 +938,25 @@ async function runBioScan(ids) {
         ])
         if (html && html.length > 500) {
           const { bio } = parseIGPage(html)
-          if (bio) flagged = BIO_SCAN_NAME_KEYWORDS.some(kw => bio.includes(kw))
+          if (bio && BIO_SCAN_NAME_KEYWORDS.some(kw => bio.includes(kw))) {
+            flagged = true; source = 'ig_bio'
+          }
         }
       } catch {}
+    }
+
+    // 3. Fallback: Spotify bio (works even when IG is blocked)
+    if (!flagged && artist.profile_url) {
+      const spotifyBio = await fetchSpotifyBio(artist.profile_url)
+      if (spotifyBio && BIO_SCAN_NAME_KEYWORDS.some(kw => spotifyBio.includes(kw))) {
+        flagged = true; source = 'spotify_bio'
+      }
     }
 
     if (flagged) {
       await supabase.from('artists').delete().eq('id', artist.id)
       _bioScanStats.flagged++
-      console.log(`[BioScan] Deleted ${artist.name} — producer/DJ detected`)
+      console.log(`[BioScan] Deleted ${artist.name} — producer/DJ detected via ${source}`)
     }
     _bioScanStats.processed++
     await new Promise(r => setTimeout(r, 800))
@@ -933,7 +964,7 @@ async function runBioScan(ids) {
 
   _bioScanStats.current = null
   _bioScanStats.running = false
-  console.log(`[BioScan] Done — ${_bioScanStats.flagged} flagged out of ${ids.length}`)
+  console.log(`[BioScan] Done — ${_bioScanStats.flagged} removed out of ${ids.length}`)
 }
 
 app.post('/api/artists/scan-bios', async (req, res) => {
