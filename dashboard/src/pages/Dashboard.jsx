@@ -726,9 +726,18 @@ export default function Dashboard({ API, onSelect }) {
               {discoveryRunning && <div style={{ color: "#6633ff", animation: "pulse 1s infinite" }}>● running...</div>}
             </div>
 
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
               {!discoveryRunning && (
                 <button onClick={() => { setDiscoveryOpen(false); setDiscoveryLog([]); setDiscoveryProgress(0) }} style={{ background: "#1a1a1a", border: "0.5px solid #333", borderRadius: 8, padding: "9px 20px", color: "#888", fontSize: 13, cursor: "pointer" }}>Close</button>
+              )}
+              {discoveryRunning && (
+                <button
+                  onClick={() => { setDiscoveryOpen(false) }}
+                  style={{ background: "#0a0f1a", border: "0.5px solid #1a2a3a", borderRadius: 8, padding: "9px 20px", color: "#4488cc", fontSize: 13, cursor: "pointer" }}
+                  title="Discovery keeps running — reopen anytime to check progress"
+                >
+                  Run in Background
+                </button>
               )}
               <button
                 onClick={runDiscovery}
@@ -987,7 +996,8 @@ export default function Dashboard({ API, onSelect }) {
                     : "Scan Bios"}
                 </button>
               )}
-              <button onClick={() => { setDiscoveryOpen(true) }} style={btnStyle("linear-gradient(135deg,#1a0a2e,#0d1a2e)", "1px solid #6633ff44", "#aa66ff", { fontWeight: 700, letterSpacing: "0.02em" })}>
+              <button onClick={() => { setDiscoveryOpen(true) }} style={btnStyle("linear-gradient(135deg,#1a0a2e,#0d1a2e)", `1px solid ${discoveryRunning ? "#6633ffaa" : "#6633ff44"}`, "#aa66ff", { fontWeight: 700, letterSpacing: "0.02em", position: "relative" })}>
+                {discoveryRunning && <span style={{ position: "absolute", top: 5, right: 5, width: 6, height: 6, borderRadius: "50%", background: "#4caf50", animation: "pulse 1.5s infinite" }} />}
                 + Discovery
               </button>
               <button onClick={() => setSpotifyDumpOpen(true)} style={btnStyle("#0a1a0f", "0.5px solid #1DB95433", "#1DB954")}>
