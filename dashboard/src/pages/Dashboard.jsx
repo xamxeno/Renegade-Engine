@@ -225,10 +225,9 @@ export default function Dashboard({ API, onSelect }) {
     setAddingManual(false)
   }
 
-  const runDiscovery = async () => {
+  const streamDiscovery = async (fresh) => {
     setDiscoveryRunning(true)
-    setDiscoveryLog([])
-    setDiscoveryProgress(0)
+    if (fresh) { setDiscoveryLog([]); setDiscoveryProgress(0) }
     try {
       const r = await fetch(`${API}/api/discovery/run`, { method: 'POST' })
       const reader = r.body.getReader()
@@ -245,7 +244,7 @@ export default function Dashboard({ API, onSelect }) {
           try {
             const msg = JSON.parse(line)
             if (msg.log)      setDiscoveryLog(l => [...l, msg.log])
-            if (msg.progress) setDiscoveryProgress(msg.progress)
+            if (msg.progress !== undefined) setDiscoveryProgress(msg.progress)
             if (msg.done)     { fetchArtists(); loadSessions() }
           } catch { setDiscoveryLog(l => [...l, line]) }
         }
@@ -253,6 +252,23 @@ export default function Dashboard({ API, onSelect }) {
     } catch (e) { setDiscoveryLog(l => [...l, `Error: ${e.message}`]) }
     setDiscoveryRunning(false)
   }
+
+  const runDiscovery = () => streamDiscovery(true)
+
+  // On mount — check if discovery is already running (page was closed mid-run)
+  useEffect(() => {
+    fetch(`${API}/api/discovery/status`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.running) {
+          setDiscoveryOpen(true)
+          setDiscoveryLog([`● Reconnected — discovery already running (${d.logLines} lines logged)`])
+          setDiscoveryProgress(d.progress || 0)
+          streamDiscovery(false)
+        }
+      })
+      .catch(() => {})
+  }, [API])
 
   // Debounced refetch on search changes
   useEffect(() => {

@@ -1388,59 +1388,99 @@ app.post('/api/enrich/:id', async (req, res) => {
   }
 })
 
-// POST /api/discovery/run — stream discovery.py output to dashboard
+// ── Discovery process state — survives client disconnects ────────────────────
+let _discovery = {
+  running: false,
+  py: null,
+  log: [],       // full log history so reconnecting clients catch up
+  progress: 0,
+  clients: [],   // active SSE response objects
+}
+
+function discoveryBroadcast(obj) {
+  const line = JSON.stringify(obj) + "\n"
+  _discovery.clients = _discovery.clients.filter(r => !r.writableEnded)
+  _discovery.clients.forEach(r => { try { r.write(line) } catch {} })
+}
+
+// POST /api/discovery/run — start discovery or reconnect to running one
 app.post('/api/discovery/run', (req, res) => {
   res.setHeader('Content-Type', 'application/x-ndjson')
   res.setHeader('Transfer-Encoding', 'chunked')
   res.setHeader('Cache-Control', 'no-cache')
 
+  // If already running, replay log history then subscribe to live updates
+  if (_discovery.running) {
+    _discovery.log.forEach(obj => { try { res.write(JSON.stringify(obj) + "\n") } catch {} })
+    _discovery.clients.push(res)
+    req.on('close', () => { _discovery.clients = _discovery.clients.filter(r => r !== res) })
+    return
+  }
+
+  // Start fresh discovery process
+  _discovery = { running: true, py: null, log: [], progress: 0, clients: [res] }
+
   const discoveryPath = path.join(__dirname, '../discovery/discovery.py')
   const py = spawn('python', [discoveryPath, '--no-prompt'], {
     cwd: path.join(__dirname, '../discovery')
   })
+  _discovery.py = py
+
+  const emit = obj => {
+    _discovery.log.push(obj)
+    discoveryBroadcast(obj)
+  }
 
   let lineBuffer = ""
-  let saved = 0
-
-  const send = obj => res.write(JSON.stringify(obj) + "\n")
-
   py.stdout.on('data', chunk => {
     lineBuffer += chunk.toString()
     const lines = lineBuffer.split('\n')
     lineBuffer = lines.pop()
     for (const line of lines) {
       if (!line.trim()) continue
-      send({ log: line })
-      // Parse progress from lines like "Lead #12/50 saved"
+      const logObj = { log: line }
       const m = line.match(/Lead #(\d+)\/(\d+)/)
       if (m) {
-        saved = parseInt(m[1])
-        const total = parseInt(m[2])
-        send({ progress: Math.round((saved / total) * 90) })
+        _discovery.progress = Math.round((parseInt(m[1]) / parseInt(m[2])) * 90)
+        logObj.progress = _discovery.progress
       }
-      if (line.includes('SCAN COMPLETE') || line.includes('Leads are live')) {
-        send({ progress: 100 })
+      if (line.includes('DISCOVERY COMPLETE') || line.includes('Leads are live')) {
+        _discovery.progress = 100
+        logObj.progress = 100
       }
+      emit(logObj)
     }
   })
 
   py.stderr.on('data', chunk => {
     for (const line of chunk.toString().split('\n')) {
-      if (line.trim()) send({ log: `[err] ${line}` })
+      if (line.trim()) emit({ log: `[err] ${line}` })
     }
   })
 
   py.on('close', () => {
-    send({ progress: 100, done: true, log: '=== Discovery finished ===' })
-    res.end()
+    const final = { progress: 100, done: true, log: '=== Discovery finished ===' }
+    emit(final)
+    _discovery.running = false
+    _discovery.py = null
+    _discovery.clients.forEach(r => { try { r.end() } catch {} })
+    _discovery.clients = []
   })
 
   py.on('error', err => {
-    send({ log: `ERROR: ${err.message}`, done: true })
-    res.end()
+    emit({ log: `ERROR: ${err.message}`, done: true })
+    _discovery.running = false
+    _discovery.clients.forEach(r => { try { r.end() } catch {} })
+    _discovery.clients = []
   })
 
-  req.on('close', () => py.kill())
+  // Client disconnect — remove from list but DON'T kill the process
+  req.on('close', () => { _discovery.clients = _discovery.clients.filter(r => r !== res) })
+})
+
+// GET /api/discovery/status — lets dashboard check if discovery is still running on reconnect
+app.get('/api/discovery/status', (req, res) => {
+  res.json({ running: _discovery.running, progress: _discovery.progress, logLines: _discovery.log.length })
 })
 
 // GET /api/verify-status
