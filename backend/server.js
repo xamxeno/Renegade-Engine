@@ -1501,6 +1501,69 @@ app.get('/api/enrich/status', (req, res) => {
   res.json({ busy: _enrichBusy, ..._enrichStats })
 })
 
+// POST /api/import-instagram — import artists found via Instagram (no Spotify required)
+// Accepts { artists: [ { name, instagram, instagram_url, spotify_url, notes } ] }
+app.post('/api/import-instagram', async (req, res) => {
+  try {
+    const body = req.body
+    const list = Array.isArray(body) ? body : (body.artists || body.entries || [])
+    if (!list.length) return res.status(400).json({ error: 'No artists found in payload' })
+
+    let saved = 0, skipped = 0, queued = 0
+    const toQueue = []
+
+    for (const entry of list) {
+      const name = (entry.name || '').trim()
+      const ig   = (entry.instagram || '').replace(/^@/, '').trim()
+      if (!name || !ig) { skipped++; continue }
+
+      const spotifyUrl = entry.spotify_url || entry.profile_url || ''
+      const spotifyM   = spotifyUrl.match(/open\.spotify\.com\/artist\/([A-Za-z0-9]+)/)
+      const platform    = spotifyM ? 'spotify'   : 'instagram'
+      const platform_id = spotifyM ? spotifyM[1] : ig
+
+      const payload = {
+        name,
+        platform,
+        platform_id,
+        profile_url:     spotifyUrl || `https://instagram.com/${ig}`,
+        instagram:       ig,
+        contact_quality: 'verifying',
+        status:          'new',
+        session_id:      'manual_searched',
+        notes:           entry.notes || null,
+        discovered_at:   new Date().toISOString(),
+        updated_at:      new Date().toISOString(),
+      }
+
+      const { data, error } = await supabase
+        .from('artists')
+        .upsert(payload, { onConflict: 'platform,platform_id', ignoreDuplicates: false })
+        .select('id, name, instagram')
+        .single()
+
+      if (error) { skipped++; continue }
+      saved++
+      toQueue.push({ id: data.id, handle: ig, name: data.name })
+      queued++
+    }
+
+    // Queue for IG bio verification
+    const alreadyQueued = new Set(_verifyQueue.map(q => q.id))
+    for (const item of toQueue) {
+      if (!alreadyQueued.has(item.id)) _verifyQueue.push(item)
+    }
+    _verifyStats.total += queued
+    _verifyStats.processed = Math.min(_verifyStats.processed, _verifyStats.total)
+    if (!_verifyBusy && _verifyQueue.length > 0) verifyWorker()
+
+    console.log(`[ImportIG] ${saved} saved, ${queued} queued for verification, ${skipped} skipped`)
+    res.json({ success: true, saved, skipped, queued })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // POST /api/sync-instagram-paste — accept JSON array, queue with instagram for IG verification
 app.post('/api/sync-instagram-paste', async (req, res) => {
   try {

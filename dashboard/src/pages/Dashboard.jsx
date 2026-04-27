@@ -52,6 +52,9 @@ export default function Dashboard({ API, onSelect }) {
   const [manualIG, setManualIG] = useState("")
   const [addingManual, setAddingManual] = useState(false)
   const [manualResult, setManualResult] = useState(null)
+  const [igImportText, setIgImportText] = useState("")
+  const [igImportResult, setIgImportResult] = useState(null)
+  const [igImporting, setIgImporting] = useState(false)
   const [discoveryOpen, setDiscoveryOpen] = useState(false)
   const [discoveryRunning, setDiscoveryRunning] = useState(false)
   const [discoveryLog, setDiscoveryLog] = useState([])
@@ -251,6 +254,30 @@ export default function Dashboard({ API, onSelect }) {
       }
     } catch (e) { setDiscoveryLog(l => [...l, `Error: ${e.message}`]) }
     setDiscoveryRunning(false)
+  }
+
+  const importInstagram = async () => {
+    let parsed
+    try {
+      const raw = igImportText.trim()
+      parsed = JSON.parse(raw)
+    } catch { setIgImportResult({ error: "Invalid JSON — check your format." }); return }
+    // Accept { artists: [...] } or [...] directly
+    const list = Array.isArray(parsed) ? parsed : (parsed.artists || parsed.entries || [])
+    if (!list.length) { setIgImportResult({ error: "No artists found in JSON." }); return }
+    setIgImporting(true)
+    setIgImportResult(null)
+    try {
+      const r = await fetch(`${API}/api/import-instagram`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artists: list })
+      })
+      const d = await r.json()
+      if (d.error) setIgImportResult({ error: d.error })
+      else { setIgImportResult({ ok: true, saved: d.saved, skipped: d.skipped, queued: d.queued }); fetchArtists(); loadSessions() }
+    } catch { setIgImportResult({ error: 'Server unreachable' }) }
+    setIgImporting(false)
   }
 
   const runDiscovery = () => streamDiscovery(true)
@@ -763,9 +790,9 @@ export default function Dashboard({ API, onSelect }) {
             </div>
 
             {/* Tabs */}
-            <div style={{ display: "flex", gap: 6 }}>
-              {[["manual", "Add Lead"], ["json", "Instagram JSON"]].map(([tab, label]) => (
-                <button key={tab} onClick={() => { setPasteTab(tab); setPasteResult(null); setManualResult(null) }}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {[["manual", "Add Lead"], ["instagram", "Instagram"], ["json", "IG JSON"]].map(([tab, label]) => (
+                <button key={tab} onClick={() => { setPasteTab(tab); setPasteResult(null); setManualResult(null); setIgImportResult(null) }}
                   style={{ background: pasteTab === tab ? "#1a1a2e" : "transparent", border: `0.5px solid ${pasteTab === tab ? "#4433aa" : "#222"}`, borderRadius: 8, padding: "7px 16px", color: pasteTab === tab ? "#9966ff" : "#555", fontSize: 13, fontWeight: pasteTab === tab ? 600 : 400, cursor: "pointer" }}>
                   {label}
                 </button>
@@ -797,6 +824,39 @@ export default function Dashboard({ API, onSelect }) {
                   <button onClick={() => { setPastePanelOpen(false); setManualResult(null) }} style={{ background: "#1a1a1a", border: "0.5px solid #333", borderRadius: 8, padding: "9px 20px", color: "#888", fontSize: 13, cursor: "pointer" }}>Close</button>
                   <button onClick={addManualLead} disabled={addingManual || !manualUrl.trim()} style={{ background: addingManual || !manualUrl.trim() ? "#111" : "#9966ff", border: "none", borderRadius: 8, padding: "9px 24px", color: addingManual || !manualUrl.trim() ? "#333" : "#fff", fontSize: 13, fontWeight: 700, cursor: addingManual || !manualUrl.trim() ? "default" : "pointer" }}>
                     {addingManual ? "Adding..." : "Add Lead"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ── Instagram tab ── */}
+            {pasteTab === "instagram" && (
+              <>
+                <div style={{ color: "#555", fontSize: 12 }}>Paste your Instagram JSON from Claude. Spotify URL is optional — artists without one are saved as <strong style={{ color: "#888" }}>instagram</strong> platform leads in the <strong style={{ color: "#888" }}>Manual Searched</strong> batch.</div>
+                <div style={{ background: "#0a0a0a", border: "0.5px solid #1a1a1a", borderRadius: 8, padding: "10px 12px" }}>
+                  <div style={{ color: "#444", fontSize: 11, marginBottom: 4, fontFamily: "monospace" }}>Accepted formats:</div>
+                  <div style={{ color: "#555", fontSize: 10, fontFamily: "monospace", lineHeight: 1.7 }}>
+                    {'{ "artists": [ { "name": "...", "instagram": "handle", "spotify_url": "..." } ] }'}<br/>
+                    {'[ { "name": "...", "instagram": "handle", "notes": "..." } ]'}
+                  </div>
+                </div>
+                <textarea
+                  value={igImportText}
+                  onChange={e => { setIgImportText(e.target.value); setIgImportResult(null) }}
+                  placeholder='Paste JSON here...'
+                  style={{ width: "100%", height: 240, background: "#0a0a0a", border: "0.5px solid #222", borderRadius: 8, padding: "12px", color: "#ccc", fontSize: 12, fontFamily: "monospace", resize: "vertical", outline: "none", boxSizing: "border-box" }}
+                />
+                {igImportResult && (
+                  <div style={{ background: igImportResult.error ? "#1a0808" : "#0a1a0a", border: `0.5px solid ${igImportResult.error ? "#3a1515" : "#1a3a1a"}`, borderRadius: 8, padding: "10px 14px", fontSize: 13, color: igImportResult.error ? "#f44336" : "#4caf50" }}>
+                    {igImportResult.error
+                      ? igImportResult.error
+                      : `Imported ${igImportResult.saved} artists — ${igImportResult.queued} queued for IG verification${igImportResult.skipped ? ` · ${igImportResult.skipped} skipped` : ''}`}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                  <button onClick={() => { setPastePanelOpen(false); setIgImportText(""); setIgImportResult(null) }} style={{ background: "#1a1a1a", border: "0.5px solid #333", borderRadius: 8, padding: "9px 20px", color: "#888", fontSize: 13, cursor: "pointer" }}>Close</button>
+                  <button onClick={importInstagram} disabled={igImporting || !igImportText.trim()} style={{ background: igImporting || !igImportText.trim() ? "#111" : "#cc44aa", border: "none", borderRadius: 8, padding: "9px 24px", color: igImporting || !igImportText.trim() ? "#333" : "#fff", fontSize: 13, fontWeight: 700, cursor: igImporting || !igImportText.trim() ? "default" : "pointer" }}>
+                    {igImporting ? "Importing..." : "Import Artists"}
                   </button>
                 </div>
               </>
