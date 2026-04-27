@@ -9,6 +9,8 @@ export default function ArtistDetail({ API, id, onBack }) {
   const [status, setStatus] = useState("")
   const [msg, setMsg] = useState(null)
   const [enriching, setEnriching] = useState(false)
+  const [claudeScanning, setClaudeScanning] = useState(false)
+  const [claudeMsg, setClaudeMsg] = useState(null)
   const [refreshingListeners, setRefreshingListeners] = useState(false)
   const [removing, setRemoving] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(false)
@@ -123,6 +125,36 @@ export default function ArtistDetail({ API, id, onBack }) {
   }
 
   const findContacts = () => findContactsFor(id, artist?.name)
+
+  const claudeScan = async () => {
+    setClaudeScanning(true)
+    setClaudeMsg(null)
+    try {
+      const r = await fetch(`${API}/api/artists/${id}/claude-scan`, { method: 'POST' })
+      const d = await r.json()
+      if (d.error) {
+        setClaudeMsg({ type: 'error', text: d.error })
+      } else {
+        // Update local state with new score/analysis
+        setArtist(prev => ({
+          ...prev,
+          score:        d.score ?? prev.score,
+          score_reason: d.score_reason || prev.score_reason,
+          needs:        d.needs || prev.needs,
+          instagram:    d.instagram || prev.instagram,
+          contact_quality: d.instagram ? 'verifying' : (prev.instagram ? prev.contact_quality : 'contactless')
+        }))
+        if (d.ig_found) {
+          setClaudeMsg({ type: 'success', text: `Found @${d.instagram} — queued for verification` })
+        } else {
+          setClaudeMsg({ type: 'error', text: `Claude couldn't find an Instagram for ${artist?.name}. Try Find Contacts for a web search.` })
+        }
+      }
+    } catch {
+      setClaudeMsg({ type: 'error', text: 'Claude scan failed — backend not reachable' })
+    }
+    setClaudeScanning(false)
+  }
 
   const refreshListeners = async () => {
     setRefreshingListeners(true)
@@ -280,17 +312,28 @@ export default function ArtistDetail({ API, id, onBack }) {
           </div>
 
           {/* Contact Channels */}
-          <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
             <span style={{ color: "#555", fontSize: 12 }}>Contact Channels</span>
-            <button onClick={findContacts} disabled={enriching} style={{
-              background: enriching ? "#1a1a1a" : "#1a0d00",
-              border: "0.5px solid #ff4d0033",
-              borderRadius: 6, padding: "5px 12px",
-              color: enriching ? "#555" : "#ff4d00",
-              fontSize: 12, cursor: enriching ? "default" : "pointer"
-            }}>
-              {enriching ? "Searching..." : "Find Contacts"}
-            </button>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={claudeScan} disabled={claudeScanning || enriching} style={{
+                background: claudeScanning ? "#1a1a1a" : "#0d1a2a",
+                border: `0.5px solid ${claudeScanning ? "#222" : "#cc88ff44"}`,
+                borderRadius: 6, padding: "5px 12px",
+                color: claudeScanning ? "#555" : "#cc88ff",
+                fontSize: 12, cursor: claudeScanning || enriching ? "default" : "pointer"
+              }}>
+                {claudeScanning ? "Scanning..." : "Claude Scan"}
+              </button>
+              <button onClick={findContacts} disabled={enriching || claudeScanning} style={{
+                background: enriching ? "#1a1a1a" : "#1a0d00",
+                border: "0.5px solid #ff4d0033",
+                borderRadius: 6, padding: "5px 12px",
+                color: enriching ? "#555" : "#ff4d00",
+                fontSize: 12, cursor: enriching || claudeScanning ? "default" : "pointer"
+              }}>
+                {enriching ? "Searching..." : "Find Contacts"}
+              </button>
+            </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {artist.instagram && (
@@ -484,6 +527,16 @@ export default function ArtistDetail({ API, id, onBack }) {
             </span>
           )}
         </div>
+        {claudeMsg && (
+          <div style={{
+            marginTop: 10, padding: "10px 14px", borderRadius: 8, fontSize: 13,
+            background: claudeMsg.type === "success" ? "#0a1a0a" : "#1a0808",
+            border: `0.5px solid ${claudeMsg.type === "success" ? "#1a3a1a" : "#3a1515"}`,
+            color: claudeMsg.type === "success" ? "#4caf50" : "#f44336"
+          }}>
+            {claudeMsg.text}
+          </div>
+        )}
       </div>
     </div>
   )

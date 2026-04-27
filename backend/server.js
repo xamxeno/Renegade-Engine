@@ -483,6 +483,99 @@ app.post('/api/pitch', async (req, res) => {
   }
 })
 
+// POST /api/artists/:id/claude-scan — use Claude to find Instagram + re-score + re-analyze
+app.post('/api/artists/:id/claude-scan', async (req, res) => {
+  const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY
+  if (!CLAUDE_API_KEY) return res.status(500).json({ error: 'CLAUDE_API_KEY not set' })
+
+  const { data: artist, error } = await supabase.from('artists').select('*').eq('id', req.params.id).single()
+  if (error || !artist) return res.status(404).json({ error: 'Artist not found' })
+
+  try {
+    const prompt = `You are a music industry researcher. Given this artist's info, do two things:
+
+Artist: ${artist.name}
+Platform: ${artist.platform}
+Spotify URL: ${artist.profile_url || 'unknown'}
+Genres: ${artist.genres || 'unknown'}
+Listeners: ${artist.listeners || artist.followers || 0}
+Current score reason: ${artist.score_reason || 'none'}
+
+TASK 1 — Find Instagram:
+Search your knowledge for this artist's Instagram handle. Only return a handle if you are confident it belongs to THIS specific artist (not a different person with the same name). The handle should be their real personal/music Instagram, not a fan page.
+
+TASK 2 — Score & analyze:
+Score this artist 0-100 for Renegade Records outreach potential. Consider: listener count, unsigned status signals, genre fit (R&B, Hip-Hop, Trap Soul), growth potential, production need signals.
+
+Respond ONLY with valid JSON, no explanation:
+{
+  "instagram": "handle_without_@_or_null_if_not_found",
+  "confident": true or false,
+  "score": 0-100,
+  "score_reason": "2-3 sentence analysis of why this score",
+  "needs": "brief production need signal or empty string"
+}`
+
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': CLAUDE_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    })
+    const d = await r.json()
+    const raw = (d.content?.[0]?.text || '').trim()
+
+    let parsed
+    try {
+      const jsonMatch = raw.match(/\{[\s\S]*\}/)
+      parsed = JSON.parse(jsonMatch?.[0] || raw)
+    } catch {
+      return res.status(500).json({ error: 'Claude returned invalid JSON', raw })
+    }
+
+    const updates = {
+      score:        parsed.score ?? artist.score,
+      score_reason: parsed.score_reason || artist.score_reason,
+      needs:        parsed.needs || artist.needs,
+      updated_at:   new Date().toISOString()
+    }
+
+    let igFound = false
+    if (parsed.instagram && parsed.instagram !== 'null' && parsed.confident !== false) {
+      const handle = parsed.instagram.replace(/^@/, '').trim()
+      if (handle) {
+        updates.instagram       = handle
+        updates.contact_quality = 'verifying'
+        igFound = true
+        // Queue for IG bio verification
+        _verifyQueue.push({ id: artist.id, handle, name: artist.name })
+        _verifyStats.total++
+        if (!_verifyBusy) verifyWorker()
+      }
+    } else if (!artist.instagram) {
+      updates.contact_quality = 'contactless'
+    }
+
+    await supabase.from('artists').update(updates).eq('id', artist.id)
+
+    console.log(`[ClaudeScan] ${artist.name} — score ${parsed.score}, IG ${igFound ? updates.instagram : 'not found'}`)
+    res.json({
+      success:      true,
+      ig_found:     igFound,
+      instagram:    updates.instagram || null,
+      score:        updates.score,
+      score_reason: updates.score_reason,
+      needs:        updates.needs,
+      confident:    parsed.confident
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // POST /api/score — Claude-score a list of artist IDs (or all unscored if no ids given)
 app.post('/api/score', async (req, res) => {
   const { ids } = req.body || {}
