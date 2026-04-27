@@ -322,7 +322,7 @@ export default function ArtistDetail({ API, id, onBack }) {
                 color: claudeScanning ? "#555" : "#cc88ff",
                 fontSize: 12, cursor: claudeScanning || enriching ? "default" : "pointer"
               }}>
-                {claudeScanning ? "Scanning..." : "Claude Scan"}
+                {claudeScanning ? "Scanning... (30-90s)" : "Claude Scan"}
               </button>
               <button onClick={findContacts} disabled={enriching || claudeScanning} style={{
                 background: enriching ? "#1a1a1a" : "#1a0d00",
