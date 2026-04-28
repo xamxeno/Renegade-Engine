@@ -123,7 +123,7 @@ JUNK_EXACT = {
 }
 
 PRODUCER_NAME_PATTERNS = [
-    "prod.", "prod by", "prodby", "prod_by", "xproducer", "beatz",
+    "prod.", "prod by", "prodby", "prod_by", "produced by", "producedby", "xproducer", "beatz",
     "tha producer", "the producer", "on the beat", "type beat",
     "producer", "beatmaker", "beat maker",
     "dj ", " dj ", "dj-", "dj_", "deejay", "disc jockey", "turntablist",
