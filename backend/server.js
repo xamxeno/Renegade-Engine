@@ -529,24 +529,32 @@ app.post('/api/artists/:id/claude-scan', async (req, res) => {
       py.on('error', () => { clearTimeout(kill); resolve(null) })
     })
 
-    const igFound   = !!(resolveResult?.instagram)
-    const igHandle  = resolveResult?.instagram || null
-    const igFollowers = resolveResult?.ig_followers || null
+    // If resolve found IG but followers exceed the 100K cap, discard it — wrong/celebrity match
+    const rawHandle    = resolveResult?.instagram || null
+    const rawFollowers = resolveResult?.ig_followers || null
+    const igTooLarge   = rawFollowers && rawFollowers > 100000
+    const igHandle     = (rawHandle && !igTooLarge) ? rawHandle : null
+    const igFollowers  = igHandle ? rawFollowers : null
+    const igFound      = !!igHandle
 
     // ── Step 2: Claude re-scores and re-analyzes ──
+    const genreInfo = artist.genres && artist.genres.trim()
+      ? artist.genres
+      : 'not specified (likely hip-hop/R&B/trap based on platform and listener profile)'
     const scorePrompt = `You are a music A&R analyst for Renegade Records (independent hip-hop/R&B label).
-Score this artist 0-100 for outreach potential and write a 2-3 sentence analysis.
+Score this artist 0-100 for outreach potential and write a 2-3 sentence analysis. Be specific — reference their listener count and any genre signals.
 
 Artist: ${artist.name}
-Genres: ${artist.genres || 'unknown'}
+Genres: ${genreInfo}
 Monthly listeners: ${(artist.listeners || artist.followers || 0).toLocaleString()}
 Instagram: ${igHandle ? `@${igHandle} (${igFollowers?.toLocaleString() ?? '?'} followers)` : 'not found'}
 Platform: ${artist.platform}
+Bio/notes: ${artist.score_reason || 'none'}
 
 Scoring criteria: listener range (sweet spot 5K-80K), genre fit (R&B, Hip-Hop, Trap Soul best), unsigned signals, engagement potential, production need signals.
 
 Respond ONLY with valid JSON:
-{"score": 0-100, "score_reason": "2-3 sentence analysis", "needs": "one-line production need signal or empty string"}`
+{"score": 0-100, "score_reason": "2-3 sentence analysis referencing their listener count and genre", "needs": "one-line production need signal or empty string"}`
 
     const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -579,10 +587,12 @@ Respond ONLY with valid JSON:
 
     await supabase.from('artists').update(updates).eq('id', artist.id)
 
-    console.log(`[ClaudeScan] ${artist.name} — score ${updates.score}, IG ${igHandle || 'not found'}`)
+    console.log(`[ClaudeScan] ${artist.name} — score ${updates.score}, IG ${igHandle || (igTooLarge ? `discarded (${rawHandle} has ${rawFollowers?.toLocaleString()} followers)` : 'not found')}`)
     res.json({
       success:      true,
       ig_found:     igFound,
+      ig_too_large: igTooLarge || false,
+      ig_discarded: igTooLarge ? rawHandle : null,
       instagram:    igHandle,
       score:        updates.score,
       score_reason: updates.score_reason,

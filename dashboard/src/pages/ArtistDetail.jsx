@@ -146,6 +146,8 @@ export default function ArtistDetail({ API, id, onBack }) {
         }))
         if (d.ig_found) {
           setClaudeMsg({ type: 'success', text: `Found @${d.instagram} — queued for verification` })
+        } else if (d.ig_too_large) {
+          setClaudeMsg({ type: 'error', text: `Found @${d.ig_discarded} but they have 100K+ followers — likely a celebrity match, not this artist. Try Find Contacts.` })
         } else {
           setClaudeMsg({ type: 'error', text: `Claude couldn't find an Instagram for ${artist?.name}. Try Find Contacts for a web search.` })
         }
