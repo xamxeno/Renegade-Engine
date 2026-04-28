@@ -115,6 +115,13 @@ JUNK_KEYWORDS = [
     "upcoming artist","rising artist","unsigned artist",
 ]
 
+# Exact-match junk — name must equal one of these (case-insensitive) or be a single word matching
+JUNK_EXACT = {
+    "prod","prods","production","productions","beats","beat","music",
+    "untitled","unnamed","unknown","n/a","tba","tbd","demo","test",
+    "artist","rapper","singer","musician","vocalist","performer",
+}
+
 PRODUCER_NAME_PATTERNS = [
     "prod.", "prod by", "prodby", "prod_by", "xproducer", "beatz",
     "tha producer", "the producer", "on the beat", "type beat",
@@ -124,6 +131,8 @@ PRODUCER_NAME_PATTERNS = [
 
 def is_junk(name):
     n = name.lower().strip()
+    if n in JUNK_EXACT:
+        return True
     if any(kw in n for kw in JUNK_KEYWORDS):
         return True
     if any(p in n for p in PRODUCER_NAME_PATTERNS):

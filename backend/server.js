@@ -712,13 +712,14 @@ app.post('/api/send-email', async (req, res) => {
 // GET /api/stats — dashboard summary numbers
 app.get('/api/stats', async (req, res) => {
   try {
-    const { data } = await supabase.from('artists').select('status, score')
-    const total = data.length
-    const contacted = data.filter(a => a.status === 'contacted').length
-    const pitched = data.filter(a => a.status === 'pitched').length
-    const signed = data.filter(a => a.status === 'signed').length
+    const { data } = await supabase.from('artists').select('status, score, contact_quality')
+    const active = data.filter(a => a.contact_quality !== 'skip')
+    const total = active.length
+    const contacted = active.filter(a => a.status === 'contacted').length
+    const pitched = active.filter(a => a.status === 'pitched').length
+    const signed = active.filter(a => a.status === 'signed').length
     const avg_score = total > 0
-      ? Math.round(data.reduce((s, a) => s + (a.score || 0), 0) / total)
+      ? Math.round(active.reduce((s, a) => s + (a.score || 0), 0) / total)
       : 0
     res.json({ total, contacted, pitched, signed, avg_score })
   } catch (err) {
