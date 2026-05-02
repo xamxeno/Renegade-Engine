@@ -113,6 +113,8 @@ JUNK_KEYWORDS = [
     "artist","rapper","singer","vocalist","musician","performer",
     "independent","indie artist","new artist","emerging artist",
     "upcoming artist","rising artist","unsigned artist",
+    "sessions","session","showcase","compilation","volume","vol.",
+    "presents","presents:","featuring","feat.","ft.","vs.",
 ]
 
 # Exact-match junk — name must equal one of these (case-insensitive)
@@ -471,6 +473,95 @@ def spotify_keyword_search(query, pages=4):
         print(f"    '{query}': {raw_count} raw → -{skip_junk} junk, -{skip_pop} popular, -{skip_region} region, -{skip_listeners} listeners → {len(artists)} pass")
     return artists
 
+# ── PLAYLIST-BASED DISCOVERY ───────────────────────────────────────────────────
+# Searches playlists by genre/style, pulls artists from tracks.
+# Reaches artists that never show up in name-based artist search.
+PLAYLIST_SEARCHES = [
+    "new rnb 2024", "new rnb 2025", "underground rnb",
+    "trap soul 2024", "trap soul 2025", "neo soul 2024",
+    "bedroom rnb", "dark rnb", "alternative rnb",
+    "new hip hop 2024", "new hip hop 2025", "melodic rap 2024",
+    "underground hip hop", "conscious rap", "emotional rap",
+    "lo fi rnb", "acoustic rnb", "guitar rnb",
+    "new uk rnb", "uk rap 2024", "uk drill melodic",
+    "new toronto rnb", "canadian rnb", "australian hip hop",
+    "indie rnb", "chill rnb", "late night rnb",
+    "slow jam 2024", "heartbreak rnb", "sad rap",
+    "street soul", "gritty rap", "real rap 2024",
+]
+
+def spotify_playlist_search(query, max_playlists=5, max_tracks=50):
+    """Search playlists by keyword, extract artists from their tracks."""
+    artists_out = []
+    seen_aids = set()
+
+    data = sp("search", {"q": query, "type": "playlist", "limit": max_playlists, "market": "US"})
+    playlists = data.get("playlists", {}).get("items", []) or []
+
+    for pl in playlists:
+        if not pl:
+            continue
+        pl_id = pl.get("id", "")
+        if not pl_id:
+            continue
+
+        # Get tracks from this playlist
+        tracks_data = sp(f"playlists/{pl_id}/tracks", {
+            "limit": max_tracks, "fields": "items(track(artists,id))", "market": "US"
+        })
+        items = tracks_data.get("items", []) or []
+
+        for item in items:
+            track = item.get("track") or {}
+            for artist_stub in track.get("artists", []):
+                aid = artist_stub.get("id", "")
+                name = artist_stub.get("name", "").strip()
+                if not aid or not name or aid in seen_aids:
+                    continue
+                if is_junk(name):
+                    continue
+                seen_aids.add(aid)
+
+                # Fetch full artist data
+                full = sp(f"artists/{aid}")
+                if not full:
+                    continue
+                sp_followers = full.get("followers", {}).get("total") or 0
+                sp_popularity = full.get("popularity") or 0
+                genres = full.get("genres", [])
+
+                if sp_followers > MAX_FOLLOWERS or sp_popularity > 65:
+                    continue
+                if is_blocked(genres, name=name):
+                    continue
+
+                listeners = spotify_monthly_listeners(aid)
+                if listeners is None:
+                    if sp_followers >= MIN_FOLLOWERS:
+                        listeners = sp_followers
+                    elif sp_followers > 0:
+                        listeners = max(sp_followers * 8, MIN_LISTENERS)
+                    else:
+                        continue
+                if listeners > MAX_LISTENERS or listeners < MIN_LISTENERS:
+                    continue
+
+                profile_url = full.get("external_urls", {}).get("spotify", "")
+                image_url   = full["images"][0]["url"] if full.get("images") else ""
+                artist = make_artist(name, "spotify", aid,
+                                     followers=sp_followers, listeners=listeners,
+                                     genres=genres[:5], profile_url=profile_url,
+                                     image_url=image_url)
+                artists_out.append(artist)
+                time.sleep(0.15)
+
+        time.sleep(0.3)
+
+    if artists_out:
+        print(f"    playlist '{query}': {len(artists_out)} artists from {len(playlists)} playlists")
+    return artists_out
+
+
 # ── SUPABASE DEDUPLICATION ─────────────────────────────────────────────────────
 def get_existing_db_leads():
     """Fetch all platform_ids and names already in Supabase to prevent duplicates."""
@@ -755,9 +846,22 @@ def run():
                 print(f"  Enough candidates ({len(all_candidates)}) — skipping remaining keywords")
                 break
         save_keyword_stats(kw_stats)
-        print(f"  Spotify candidates: {len(all_candidates)}")
+        print(f"  Keyword candidates: {len(all_candidates)}")
+
+        # ── Playlist-based discovery — finds artists not reachable by name search ──
+        if len(all_candidates) < TARGET_LEADS * 5:
+            print(f"\n  Playlist search ({len(PLAYLIST_SEARCHES)} queries)...")
+            before_pl = len(all_candidates)
+            for plq in PLAYLIST_SEARCHES:
+                add(spotify_playlist_search(plq))
+                if len(all_candidates) >= TARGET_LEADS * 5:
+                    break
+                time.sleep(0.5)
+            print(f"  Playlist candidates: +{len(all_candidates) - before_pl} new (total: {len(all_candidates)})")
     else:
         print("  SKIPPED — add SPOTIFY_CLIENT_ID + SPOTIFY_CLIENT_SECRET to .env")
+
+    print(f"  Total Spotify candidates: {len(all_candidates)}")
 
     # Sort lowest listeners first — most reachable/hungry artists first
     all_candidates.sort(key=lambda a: a.get("listeners") or a.get("followers") or 0)
