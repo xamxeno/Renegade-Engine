@@ -408,6 +408,7 @@ def spotify_keyword_search(query, pages=4):
     """Search Spotify by keyword. Uses Spotify monthly listener scrape — no Last.fm."""
     artists = []
     seen_ids = set()
+    raw_count = skip_junk = skip_pop = skip_region = skip_listeners = 0
     for page in range(pages):
         data = sp("search", {
             "q": query, "type": "artist",
@@ -416,9 +417,11 @@ def spotify_keyword_search(query, pages=4):
         items = data.get("artists", {}).get("items", [])
         if not items:
             break
+        raw_count += len(items)
         for item in items:
             name = item.get("name", "").strip()
             if not name or is_junk(name):
+                skip_junk += 1
                 continue
             aid = item.get("id", "")
             if aid in seen_ids:
@@ -428,10 +431,12 @@ def spotify_keyword_search(query, pages=4):
             sp_followers = item.get("followers", {}).get("total") or 0
             sp_popularity = item.get("popularity") or 0
             if sp_followers > MAX_FOLLOWERS or sp_popularity > 65:
+                skip_pop += 1
                 continue
 
             genres = item.get("genres", [])
             if is_blocked(genres, name=name):
+                skip_region += 1
                 continue
 
             profile_url = item.get("external_urls", {}).get("spotify", "")
@@ -439,14 +444,19 @@ def spotify_keyword_search(query, pages=4):
 
             listeners = spotify_monthly_listeners(aid)
             if listeners is None:
-                # Fallback to followers if scrape fails — only if followers in range
+                # Scrape failed — estimate from followers or accept with floor estimate
+                # Small artists often have very few followers but real listeners
                 if sp_followers >= MIN_FOLLOWERS:
                     listeners = sp_followers
+                elif sp_followers > 0:
+                    # Accept with rough estimate — Claude scoring will filter low-quality
+                    listeners = max(sp_followers * 8, MIN_LISTENERS)
                 else:
-                    time.sleep(0.1)
+                    # Zero followers AND scrape failed — genuinely unknown, skip
+                    skip_listeners += 1
                     continue
             if listeners > MAX_LISTENERS or listeners < MIN_LISTENERS:
-                time.sleep(0.1)
+                skip_listeners += 1
                 continue
 
             artist = make_artist(name, "spotify", aid,
@@ -456,6 +466,9 @@ def spotify_keyword_search(query, pages=4):
             artists.append(artist)
             time.sleep(0.2)
         time.sleep(0.3)
+
+    if raw_count > 0:
+        print(f"    '{query}': {raw_count} raw → -{skip_junk} junk, -{skip_pop} popular, -{skip_region} region, -{skip_listeners} listeners → {len(artists)} pass")
     return artists
 
 # ── SUPABASE DEDUPLICATION ─────────────────────────────────────────────────────
@@ -735,8 +748,7 @@ def run():
             s = kw_stats.setdefault(query, {"runs": 0, "hits": 0})
             s["runs"] += 1
             s["hits"] += new_hits
-            if new_hits:
-                print(f"  [{i}/{len(ordered_queries)}] '{query}' -> {new_hits} new")
+            print(f"  [{i}/{len(ordered_queries)}] '{query}' -> {new_hits} new (total: {len(all_candidates)})")
             time.sleep(0.3)
             # Stop searching once we have enough candidates
             if len(all_candidates) >= TARGET_LEADS * 3:
