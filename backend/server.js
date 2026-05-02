@@ -24,20 +24,39 @@ let _verifyQueue = []
 let _verifyBusy  = false
 let _verifyStats = { total: 0, processed: 0, verified: 0, flagged: 0, current: null }
 
-const IG_PRODUCER_KEYWORDS = [
+// Shared producer/DJ keyword list used by verifyWorker AND runBioScan
+const PRODUCER_KEYWORDS = [
   'producer','beat maker','beatmaker','mixing engineer','mastering engineer',
   'audio engineer','sound engineer','fl studio','ableton','logic pro',
   'prod by','beats by','trap producer','rnb producer','hip hop producer',
   'record producer','music producer','executive producer','beatsmith',
   'recording engineer','sound designer','instrumental',
-  'dj ','deejay','disc jockey','turntablist','drum and bass producer',
+  'deejay','disc jockey','turntablist','drum and bass producer',
   'dnb producer','d&b producer','house producer','edm producer',
   'techno producer','dubstep producer','garage producer',
-  'sound engineer','foley artist','composer','film composer','music composer',
+  'foley artist','composer','film composer','music composer',
   'songwriter for hire','ghostwriter','session musician','session guitarist',
   'session bassist','session drummer','live sound','front of house',
-  'studio engineer','tracking engineer','mix engineer'
+  'studio engineer','tracking engineer','mix engineer','beat store','beatz',
 ]
+
+// Check bio/description text for producer signals (word-boundary DJ match)
+function isProducerText (text) {
+  if (!text) return false
+  const t = text.toLowerCase()
+  if (/\bdj\b/.test(t)) return true
+  return PRODUCER_KEYWORDS.some(kw => t.includes(kw))
+}
+
+// Check IG username for producer signals (no spaces in usernames)
+function isProducerUsername (handle) {
+  if (!handle) return false
+  const h = handle.toLowerCase()
+  // username starts with "dj" followed by anything (djfrank, dj_x, dj.x)
+  if (/^dj[^a-z]/i.test(h) || h.startsWith('dj') && h.length > 2) return true
+  // concatenated forms: "beatmaker" → "beatmaker", "producer" → "producer"
+  return PRODUCER_KEYWORDS.some(kw => h.includes(kw.replace(/\s+/g, '')))
+}
 
 function fetchIGPage (handle) {
   return new Promise(resolve => {
@@ -66,11 +85,28 @@ function parseIGPage (html) {
     const jsonM = html.match(/"edge_followed_by"\s*:\s*\{"count"\s*:\s*(\d+)\}/)
     if (jsonM) followers = parseInt(jsonM[1])
   }
-  // Bio
+
+  // Bio — try "biography" JSON key first, fall back to og:description
   let bio = ''
   const bioM = html.match(/"biography"\s*:\s*"((?:[^"\\]|\\.)*)"/)
-  if (bioM) bio = bioM[1].replace(/\\n/g, ' ').replace(/\\u[\dA-Fa-f]{4}/g, '').toLowerCase()
-  return { followers, bio }
+  if (bioM) {
+    bio = bioM[1].replace(/\\n/g, ' ').replace(/\\u[\dA-Fa-f]{4}/g, '').toLowerCase()
+  } else {
+    const ogM = html.match(/<meta[^>]+property="og:description"[^>]+content="([^"]+)"/i)
+            || html.match(/<meta[^>]+content="([^"]+)"[^>]+property="og:description"/i)
+    if (ogM) bio = ogM[1].toLowerCase()
+  }
+
+  // Email — business accounts expose public_email in page JSON; also scan bio text
+  let email = null
+  const pubEmailM = html.match(/"public_email"\s*:\s*"([^"@\s]+@[^"]+)"/)
+  if (pubEmailM && pubEmailM[1]) email = pubEmailM[1].toLowerCase()
+  if (!email && bio) {
+    const bioEmailM = bio.match(/[\w.+-]+@[\w-]+\.[\w.]{2,}/)
+    if (bioEmailM) email = bioEmailM[0]
+  }
+
+  return { followers, bio, email }
 }
 
 async function fetchSpotifyBio (profileUrl) {
@@ -98,16 +134,17 @@ async function verifyWorker () {
         fetchIGPage(handle),
         new Promise(r => setTimeout(() => r(''), 15000))
       ])
-      const { followers, bio } = parseIGPage(html)
+      const { followers, bio, email } = parseIGPage(html)
 
       let quality = 'verified'
       const updates = { updated_at: new Date().toISOString() }
       if (followers !== null) updates.ig_followers = followers
+      if (email) { updates.email = email; console.log(`[Verify] ${name} — email found: ${email}`) }
 
       if (!html || html.length < 500) {
         // IG blocked — fall back to Spotify bio check before trusting the handle
         const spotifyBio = profile_url ? await fetchSpotifyBio(profile_url) : ''
-        if (spotifyBio && IG_PRODUCER_KEYWORDS.some(kw => spotifyBio.includes(kw))) {
+        if (isProducerText(spotifyBio)) {
           quality = 'skip'
           console.log(`[Verify] ${name} — producer detected in Spotify bio (IG blocked)`)
         } else {
@@ -117,11 +154,11 @@ async function verifyWorker () {
       } else if (followers !== null && followers > 500000) {
         quality = 'skip'
         console.log(`[Verify] ${name} — too large (${followers.toLocaleString()} followers)`)
-      } else if (bio && IG_PRODUCER_KEYWORDS.some(kw => bio.includes(kw))) {
+      } else if (isProducerText(bio)) {
         quality = 'skip'
         console.log(`[Verify] ${name} — producer detected in IG bio`)
       } else {
-        console.log(`[Verify] ${name} @${handle} — VERIFIED (${followers?.toLocaleString() ?? '?'} followers)`)
+        console.log(`[Verify] ${name} @${handle} — VERIFIED (${followers?.toLocaleString() ?? '?'} followers)${email ? ' +email' : ''}`)
       }
 
       updates.contact_quality = quality
@@ -904,20 +941,8 @@ app.post('/api/artists/rescan-all', async (req, res) => {
 })
 
 // POST /api/artists/scan-bios — fetch IG pages for a list of artist IDs and DELETE producers/DJs
-// Checks bio text AND username for producer/DJ keywords. Hard-deletes matches — does not flag.
-const BIO_SCAN_NAME_KEYWORDS = [
-  'dj ','dj-','dj_',' dj ','deejay','disc jockey','turntablist',
-  'producer','beat maker','beatmaker','prod by','beats by','beatsmith',
-  'mixing engineer','mastering engineer','audio engineer','sound engineer',
-  'fl studio','ableton','logic pro','trap producer','rnb producer',
-  'hip hop producer','record producer','music producer','executive producer',
-  'recording engineer','sound designer','edm producer','house producer',
-  'techno producer','dubstep producer','composer','film composer',
-  'session musician','studio engineer','mix engineer','beat store','beatz',
-]
-
+// Checks username, IG bio (with og:description fallback), and Spotify bio. Hard-deletes matches.
 let _bioScanStats = { total: 0, processed: 0, flagged: 0, current: null, running: false }
-
 
 async function runBioScan(ids) {
   _bioScanStats = { total: ids.length, processed: 0, flagged: 0, current: null, running: true }
@@ -933,14 +958,11 @@ async function runBioScan(ids) {
     let source = ''
 
     // 1. Check username itself
-    if (handle) {
-      const lhandle = handle.toLowerCase()
-      if (BIO_SCAN_NAME_KEYWORDS.some(kw => lhandle.includes(kw.trim()))) {
-        flagged = true; source = 'username'
-      }
+    if (handle && isProducerUsername(handle)) {
+      flagged = true; source = 'username'
     }
 
-    // 2. Try IG bio
+    // 2. Try IG bio (parseIGPage now tries biography JSON + og:description fallback)
     if (!flagged && handle) {
       try {
         const html = await Promise.race([
@@ -949,7 +971,7 @@ async function runBioScan(ids) {
         ])
         if (html && html.length > 500) {
           const { bio } = parseIGPage(html)
-          if (bio && BIO_SCAN_NAME_KEYWORDS.some(kw => bio.includes(kw))) {
+          if (isProducerText(bio)) {
             flagged = true; source = 'ig_bio'
           }
         }
@@ -959,7 +981,7 @@ async function runBioScan(ids) {
     // 3. Fallback: Spotify bio (works even when IG is blocked)
     if (!flagged && artist.profile_url) {
       const spotifyBio = await fetchSpotifyBio(artist.profile_url)
-      if (spotifyBio && BIO_SCAN_NAME_KEYWORDS.some(kw => spotifyBio.includes(kw))) {
+      if (isProducerText(spotifyBio)) {
         flagged = true; source = 'spotify_bio'
       }
     }
