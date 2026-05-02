@@ -188,84 +188,97 @@ def is_blocked(genres, bio="", name=""):
     return False
 
 # ── SPOTIFY KEYWORD SEARCHES ───────────────────────────────────────────────────
-# NOTE: Never use words like "unsigned", "independent", "artist", "singer", "rapper"
-# in queries — Spotify will literally return artists NAMED those words.
-# Use sonic/aesthetic descriptors + locations instead.
+# Keep queries SHORT (2-4 words) — Spotify search is NAME-based not descriptor-based.
+# Longer phrases like "dark rnb vocals smooth" return 0 results.
+# Avoid standalone words that ARE artist names: "unsigned", "independent", "artist",
+# "singer", "rapper" — the junk filters now handle any that slip through.
 SPOTIFY_KEYWORD_SEARCHES = [
-    # ── Sonic/aesthetic descriptors ──────────────────────────────────────────
-    "dark rnb vocals smooth",
-    "trap soul melodic hooks",
-    "neo soul acoustic guitar",
-    "midnight rnb bedroom",
-    "lo fi soul chill",
-    "alternative rnb guitar moody",
-    "melodic rap emotional",
-    "slow jam rnb smooth",
-    "trap soul ballad falsetto",
-    "ambient rnb dreamy",
-    "pain rap melodic hooks",
-    "rnb pop crossover smooth",
-    "afro rnb uk sound",
-    "drill melodic bars uk",
-    "conscious rap storytelling",
-    "rnb with rap verses",
-    "trap rnb late night",
-    "acoustic bedroom pop rnb",
-    "soulful rap hooks melodic",
-    "lo fi rnb jazzy chords",
-    # ── USA cities ───────────────────────────────────────────────────────────
-    "atlanta rnb trap new",
-    "new york hip hop melodic",
-    "los angeles rnb smooth",
-    "chicago soul trap",
-    "houston rap trap slow",
-    "miami rnb melodic",
-    "detroit soul rap gritty",
-    "memphis rap melodic slow",
-    "charlotte rnb trap",
-    "philadelphia soul rap",
-    "dallas rnb trap new",
-    "phoenix rap melodic",
-    "seattle rap rnb moody",
-    "washington dc rnb rap",
-    "nashville rnb pop",
-    "new orleans soul melodic",
-    "denver rap rnb chill",
-    "boston rap rnb smooth",
-    "baltimore trap rnb street",
-    "st louis rap trap new",
-    # ── Canada cities ────────────────────────────────────────────────────────
-    "toronto rnb trap melodic",
-    "toronto rap drill new",
-    "montreal rnb smooth",
-    "vancouver rap rnb chill",
-    "calgary rap new melodic",
-    # ── UK cities ────────────────────────────────────────────────────────────
-    "london rnb smooth new",
-    "london uk drill rap",
-    "birmingham uk rnb trap",
-    "manchester uk rap grime",
-    "leeds uk rap melodic",
-    "bristol uk rnb soul",
-    "nottingham uk rap new",
+    # ── Genre/style terms (short — Spotify indexes these) ────────────────────
+    "trap soul",
+    "neo soul",
+    "dark rnb",
+    "alternative rnb",
+    "melodic rap",
+    "bedroom pop rnb",
+    "lo fi rnb",
+    "bedroom rnb",
+    "trap rnb",
+    "conscious rap",
+    "afro soul uk",
+    "melodic drill",
+    "sad rnb",
+    "slow jam rnb",
+    "acoustic soul",
+    "rnb pop",
+    "soul rap",
+    "underground rnb",
+    "underground hip hop",
+    "street soul",
+    # ── USA cities + genre ───────────────────────────────────────────────────
+    "atlanta trap soul",
+    "atlanta rnb",
+    "new york melodic rap",
+    "new york rnb",
+    "los angeles rnb",
+    "chicago soul rap",
+    "houston rap",
+    "miami rnb",
+    "detroit soul",
+    "memphis rap",
+    "charlotte rnb",
+    "philadelphia rap",
+    "dallas rnb",
+    "seattle rnb",
+    "dc rap rnb",
+    "nashville rnb",
+    "new orleans soul",
+    "baltimore rap",
+    "st louis rap",
+    "compton rap",
+    "brooklyn rap",
+    "bronx hip hop",
+    # ── Canada ───────────────────────────────────────────────────────────────
+    "toronto rnb",
+    "toronto trap",
+    "toronto melodic rap",
+    "montreal rnb",
+    "vancouver rap",
+    # ── UK ───────────────────────────────────────────────────────────────────
+    "london rnb",
+    "london drill",
+    "birmingham uk rnb",
+    "manchester rap",
+    "leeds rap",
+    "bristol rnb",
+    "uk afrobeats rnb",
+    "uk trap soul",
+    "uk neo soul",
     # ── Australia ────────────────────────────────────────────────────────────
-    "sydney australia rnb trap",
-    "melbourne hip hop rap",
-    "brisbane australia rnb new",
+    "sydney rnb",
+    "melbourne rap",
+    "brisbane hip hop",
+    "australia trap soul",
     # ── UAE ──────────────────────────────────────────────────────────────────
-    "dubai rnb rap new",
-    "abu dhabi hip hop",
-    # ── Subgenre combos ──────────────────────────────────────────────────────
-    "sad rnb heartbreak vocals",
-    "summer rnb vibes smooth",
-    "hustler rap trap motivation",
-    "street rap real talk gritty",
-    "flex rap trap bars new",
-    "rnb with piano keys smooth",
-    "gospel soul rap inspiration",
-    "trap melodies autotune new",
-    "uk rnb slow jam new",
-    "caribbean rnb uk afro",
+    "dubai rnb",
+    "dubai rap",
+    # ── Additional style/vibe searches ───────────────────────────────────────
+    "self produced rnb",
+    "diy hip hop",
+    "bedroom soul",
+    "acoustic rnb",
+    "guitar rnb",
+    "piano rnb",
+    "emotional rap",
+    "pain rap",
+    "heartbreak rnb",
+    "late night rnb",
+    "chill rnb",
+    "smooth soul rap",
+    "gritty rap street",
+    "melodic trap",
+    "autotune trap rnb",
+    "gospel rap",
+    "drill rnb",
 ]
 
 # ── PRODUCTION NEED SIGNALS ────────────────────────────────────────────────────
@@ -391,7 +404,7 @@ def spotify_monthly_listeners(artist_id):
     return None
 
 # ── SPOTIFY SEARCH ─────────────────────────────────────────────────────────────
-def spotify_keyword_search(query, pages=2):
+def spotify_keyword_search(query, pages=4):
     """Search Spotify by keyword. Uses Spotify monthly listener scrape — no Last.fm."""
     artists = []
     seen_ids = set()
@@ -746,10 +759,10 @@ def run():
         print("  No new candidates found. All artists already in DB or none passed filters.")
         return
 
-    # ── Take up to TARGET_LEADS * 3 candidates for scoring pool ──────────────
+    # ── Take up to TARGET_LEADS * 5 candidates for scoring pool ──────────────
     pool = []
     for artist in all_candidates:
-        if len(pool) >= TARGET_LEADS * 3:
+        if len(pool) >= TARGET_LEADS * 5:
             break
         listeners = artist.get("listeners") or artist.get("followers") or 0
         if listeners > MAX_LISTENERS:
