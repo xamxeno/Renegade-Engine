@@ -115,19 +115,40 @@ JUNK_KEYWORDS = [
     "upcoming artist","rising artist","unsigned artist",
 ]
 
-# Exact-match junk — name must equal one of these (case-insensitive) or be a single word matching
+# Exact-match junk — name must equal one of these (case-insensitive)
 JUNK_EXACT = {
     "prod","prods","production","productions","beats","beat","music",
     "untitled","unnamed","unknown","n/a","tba","tbd","demo","test",
     "artist","rapper","singer","musician","vocalist","performer",
+    "unsigned","unspecified","insignificant","anonymous",
+    "rnb","r&b","hiphop","hip hop","soul","trap","pop","indie","alternative",
 }
 
 PRODUCER_NAME_PATTERNS = [
     "prod.", "prod by", "prodby", "prod_by", "produced by", "producedby", "xproducer", "beatz",
     "tha producer", "the producer", "on the beat", "type beat",
     "producer", "beatmaker", "beat maker",
-    "dj ", " dj ", "dj-", "dj_", "deejay", "disc jockey", "turntablist",
+    "dj-", "dj_", "deejay", "disc jockey", "turntablist",
 ]
+
+# Handles that are clearly generic/wrong — reject even if resolve returns them
+GENERIC_IG_HANDLES = {
+    "rnb","rb","hiphop","hiphopmusic","rnbmusic","soulmusic","trapmusic",
+    "music","rap","soul","trap","pop","indie","alternative","rock","jazz",
+    "unsigned","unsigned_","independentartist","newartist","emergingartist",
+    "artist","singer","rapper","vocalist","musician","performer",
+    "soulsister","jksoul","rnbstylerz","rnbdjs","alternativerockmusic",
+}
+
+# Genre-description names that look like category pages, not real artists
+_GENRE_NAME_RE = re.compile(
+    r'^(r&b|r\'n\'b|rnb|hip.?hop|soul|trap|pop|indie|alternative|rock|jazz|'
+    r'electronic|edm|house|techno|lo.?fi|neo.?soul|afro|drill|grime|uk rap)'
+    r'(\s*[&+x]\s*(rock|pop|soul|hip.?hop|rnb|rap|trap|edm|house))?'
+    r'(\s+(music|sounds?|vibes?|nation|stylez?|stylerz|boyz|girlz|gang|'
+    r'crew|squad|family|collective|refreshed|reloaded|remixed|session))?$',
+    re.I
+)
 
 def is_junk(name):
     n = name.lower().strip()
@@ -136,6 +157,17 @@ def is_junk(name):
     if any(kw in n for kw in JUNK_KEYWORDS):
         return True
     if any(p in n for p in PRODUCER_NAME_PATTERNS):
+        return True
+    # Word-boundary DJ check — catches "dj", "djs", "rnb djs", "dj frank"
+    if re.search(r'\bdjs?\b', n):
+        return True
+    # Name looks like a genre category/description page, or genre word + suffix
+    if re.match(r'^(rnb|r&b|hiphop|hip hop|soul|trap|rap|pop)(stylerz?|stylez?|boyz?|girlz?|nation|squad|gang|family|crew|vibes?|music|sounds?)?$', n):
+        return True
+    if _GENRE_NAME_RE.match(n):
+        return True
+    # Name contains "&" between genre words (e.g. "Alternative & Rock")
+    if re.search(r'\b(rock|pop|soul|rnb|rap|trap|jazz|indie)\s*&\s*(rock|pop|soul|rnb|rap|trap|jazz|indie)\b', n):
         return True
     if len(name.split()) > 5:
         return True
@@ -156,66 +188,84 @@ def is_blocked(genres, bio="", name=""):
     return False
 
 # ── SPOTIFY KEYWORD SEARCHES ───────────────────────────────────────────────────
+# NOTE: Never use words like "unsigned", "independent", "artist", "singer", "rapper"
+# in queries — Spotify will literally return artists NAMED those words.
+# Use sonic/aesthetic descriptors + locations instead.
 SPOTIFY_KEYWORD_SEARCHES = [
-    "independent rnb artist unsigned",
-    "self produced rnb singer",
-    "indie soul singer unsigned",
-    "independent hip hop artist self produced",
-    "unsigned neo soul artist",
-    "indie trap soul singer",
-    "bedroom rnb singer independent",
-    "self managed hip hop artist",
-    "diy rnb artist no label",
-    "underground rnb soul singer",
-    "independent rnb artist uk unsigned",
-    "indie rnb singer toronto",
-    "unsigned soul artist los angeles",
-    "independent hip hop artist atlanta",
-    "indie rnb artist new york unsigned",
-    "unsigned rnb singer canada independent",
-    "diy hip hop artist australia",
-    "independent soul artist london",
-    "alternative rnb indie artist",
-    "trap soul unsigned artist",
-    "dark rnb indie singer",
-    "acoustic soul independent singer",
-    "unsigned artist uk rnb 2024",
-    "indie hip hop artist usa new",
-    "emerging rnb singer unsigned",
-    "new rnb artist independent usa",
-    "independent trap soul artist 2024",
-    "unsigned hip hop artist toronto canada",
-    "indie soul singer australia unsigned",
-    "underground hip hop artist london uk",
-    "unsigned r&b singer usa 2024",
-    "indie rnb artist dubai uae",
-    "unsigned rapper usa self produced",
-    "new soul artist unsigned uk 2024",
-    "trap soul singer independent usa",
-    "neo soul artist independent australia",
-    "unsigned rnb singer chicago independent",
-    "indie pop rnb singer canada unsigned",
-    "independent afro rnb artist uk",
-    "unsigned melodic rapper usa indie",
-    "rnb singer songwriter unsigned usa",
-    "independent hip hop artist miami",
-    "unsigned soul singer houston",
-    "indie rnb artist dallas unsigned",
-    "unsigned rnb artist phoenix independent",
-    "independent rapper seattle unsigned",
-    "indie rnb singer birmingham uk",
-    "unsigned artist manchester uk rnb",
-    "independent rnb singer melbourne australia",
-    "unsigned hip hop artist sydney",
-    "indie soul artist dubai unsigned",
-    "rnb artist abu dhabi independent",
-    "unsigned vocalist rnb usa indie",
-    "bedroom pop rnb singer unsigned",
-    "lo fi rnb singer independent usa",
-    "alternative rnb singer unsigned 2024",
-    "melodic rap artist independent usa",
-    "unsigned singing rapper usa 2024",
-    "independent rnb artist no label 2024",
+    # ── Sonic/aesthetic descriptors ──────────────────────────────────────────
+    "dark rnb vocals smooth",
+    "trap soul melodic hooks",
+    "neo soul acoustic guitar",
+    "midnight rnb bedroom",
+    "lo fi soul chill",
+    "alternative rnb guitar moody",
+    "melodic rap emotional",
+    "slow jam rnb smooth",
+    "trap soul ballad falsetto",
+    "ambient rnb dreamy",
+    "pain rap melodic hooks",
+    "rnb pop crossover smooth",
+    "afro rnb uk sound",
+    "drill melodic bars uk",
+    "conscious rap storytelling",
+    "rnb with rap verses",
+    "trap rnb late night",
+    "acoustic bedroom pop rnb",
+    "soulful rap hooks melodic",
+    "lo fi rnb jazzy chords",
+    # ── USA cities ───────────────────────────────────────────────────────────
+    "atlanta rnb trap new",
+    "new york hip hop melodic",
+    "los angeles rnb smooth",
+    "chicago soul trap",
+    "houston rap trap slow",
+    "miami rnb melodic",
+    "detroit soul rap gritty",
+    "memphis rap melodic slow",
+    "charlotte rnb trap",
+    "philadelphia soul rap",
+    "dallas rnb trap new",
+    "phoenix rap melodic",
+    "seattle rap rnb moody",
+    "washington dc rnb rap",
+    "nashville rnb pop",
+    "new orleans soul melodic",
+    "denver rap rnb chill",
+    "boston rap rnb smooth",
+    "baltimore trap rnb street",
+    "st louis rap trap new",
+    # ── Canada cities ────────────────────────────────────────────────────────
+    "toronto rnb trap melodic",
+    "toronto rap drill new",
+    "montreal rnb smooth",
+    "vancouver rap rnb chill",
+    "calgary rap new melodic",
+    # ── UK cities ────────────────────────────────────────────────────────────
+    "london rnb smooth new",
+    "london uk drill rap",
+    "birmingham uk rnb trap",
+    "manchester uk rap grime",
+    "leeds uk rap melodic",
+    "bristol uk rnb soul",
+    "nottingham uk rap new",
+    # ── Australia ────────────────────────────────────────────────────────────
+    "sydney australia rnb trap",
+    "melbourne hip hop rap",
+    "brisbane australia rnb new",
+    # ── UAE ──────────────────────────────────────────────────────────────────
+    "dubai rnb rap new",
+    "abu dhabi hip hop",
+    # ── Subgenre combos ──────────────────────────────────────────────────────
+    "sad rnb heartbreak vocals",
+    "summer rnb vibes smooth",
+    "hustler rap trap motivation",
+    "street rap real talk gritty",
+    "flex rap trap bars new",
+    "rnb with piano keys smooth",
+    "gospel soul rap inspiration",
+    "trap melodies autotune new",
+    "uk rnb slow jam new",
+    "caribbean rnb uk afro",
 ]
 
 # ── PRODUCTION NEED SIGNALS ────────────────────────────────────────────────────
@@ -457,19 +507,14 @@ def scan_instagram(artist):
         ig           = result.get("instagram")
         ig_followers = result.get("ig_followers") or 0
 
-        if ig:
+        if ig and ig.lower() not in GENERIC_IG_HANDLES and ig_followers > 0:
             artist["instagram"]    = ig
             artist["ig_followers"] = ig_followers
             artist["contact_quality"] = "found"
-
-            # High followers + potentially low engagement = still a potential lead
-            # Don't skip — just flag in needs for manual review
-            if ig_followers > 50_000:
-                note = f"high_ig:{ig_followers:,} — verify engagement"
-                artist["needs"] = (artist.get("needs") or "") + f" | {note}"
-
             print(f"    IG: @{ig} ({ig_followers:,} followers)")
         else:
+            if ig and (ig.lower() in GENERIC_IG_HANDLES or ig_followers == 0):
+                print(f"    IG rejected: @{ig} (generic handle or 0 followers)")
             artist["contact_quality"] = "contactless"
             print(f"    No IG found — contactless")
 
@@ -701,82 +746,73 @@ def run():
         print("  No new candidates found. All artists already in DB or none passed filters.")
         return
 
-    # ── Collect leads up to TARGET_LEADS (no IG scan — worker handles that) ───
-    new_leads = []
-
-    for i, artist in enumerate(all_candidates):
-        if len(new_leads) >= TARGET_LEADS:
+    # ── Take up to TARGET_LEADS * 3 candidates for scoring pool ──────────────
+    pool = []
+    for artist in all_candidates:
+        if len(pool) >= TARGET_LEADS * 3:
             break
-
         listeners = artist.get("listeners") or artist.get("followers") or 0
-
         if listeners > MAX_LISTENERS:
             continue
-
-        artist["contact_quality"] = "none"  # worker will pick up and enrich
-        print(f"  [{len(new_leads)+1}/{TARGET_LEADS}] {artist['name']} — {listeners:,} listeners")
-        new_leads.append(artist)
+        artist["contact_quality"] = "none"
+        pool.append(artist)
 
     print(f"\n{'='*60}")
-    print(f"  DISCOVERY COMPLETE")
-    print(f"  New leads found  : {len(new_leads)}")
-    print(f"  IG enrichment    : background worker will handle")
+    print(f"  {len(pool)} candidates ready for scoring")
     print(f"{'='*60}")
 
-    if not new_leads:
-        print("  No new candidates found.")
-        return
-
-    # ── Save leads to dashboard — enrichment worker picks them up ────────────
-    print(f"\n  Saving {len(new_leads)} leads to dashboard...")
-    save(new_leads, session_id)
-    print(f"  Leads are live. Enrichment worker will find Instagrams automatically.")
-
-    # ── Claude scoring ────────────────────────────────────────────────────────
-    print(f"\n{'='*60}")
-    print(f"  CLAUDE AI SCORING")
-    est = (len(new_leads) / 20) * 0.06
-    print(f"  Artists to score : {len(new_leads)}")
-    print(f"  Estimated cost   : ~${est:.2f}")
-    print(f"{'='*60}")
+    # ── Claude scoring BEFORE save — fixes null scores in Supabase ───────────
+    def _passes_hard_filter(a):
+        needs = (a.get("needs") or "").lower()
+        genres = a.get("genres") or []
+        if is_blocked(genres):
+            return False
+        label_kw = ["managed by","booking:","management:","booking@",
+                    "warner","universal","sony","atlantic","columbia","interscope","def jam","rca"]
+        return not any(kw in needs for kw in label_kw)
 
     no_prompt = "--no-prompt" in sys.argv
-    ans = "yes" if no_prompt else input("\n  Run Claude AI scoring now? (yes/no): ").strip().lower()
-    if ans in ["yes", "y"]:
-        print(f"\n  Scoring in batches of 20...")
-        for i in range(0, len(new_leads), 20):
-            score_batch(new_leads[i:i+20])
-            print(f"  Scored {min(i+20, len(new_leads))}/{len(new_leads)}")
-            time.sleep(1)
-
-        def _passes_hard_filter(a):
-            needs = (a.get("needs") or "").lower()
-            genres = a.get("genres") or []
-            if is_blocked(genres):
-                return False
-            label_kw = ["managed by","booking:","management:","booking@",
-                        "warner","universal","sony","atlantic","columbia","interscope","def jam","rca"]
-            return not any(kw in needs for kw in label_kw)
-
-        qualified = sorted(
-            [a for a in new_leads if (a.get("score") or 0) >= MIN_SCORE and _passes_hard_filter(a)],
-            key=lambda x: x.get("score", 0), reverse=True
-        )
-
-        print(f"\n  Qualified (score >= {MIN_SCORE}): {len(qualified)}")
-        print(f"\n  TOP LEADS")
-        print(f"  {'Score':<7} {'Name':<28} {'IG':<22} {'Listeners':<12} {'Genres'}")
-        print("  " + "─"*75)
-        for a in qualified[:20]:
-            genre = ", ".join(a.get("genres", [])[:2]) or "—"
-            print(f"  [{a['score']:>3}]  {a['name']:<28} {str(a.get('listeners',0)):<12} {genre}")
-
-        print(f"\n  Updating dashboard with scores...")
-        save(qualified, session_id)
-        print(f"  Done — {len(qualified)} qualified leads live in dashboard.")
+    if CLAUDE_API_KEY:
+        est = (len(pool) / 20) * 0.06
+        print(f"\n  CLAUDE AI SCORING — {len(pool)} artists (~${est:.2f})")
+        ans = "yes" if no_prompt else input("  Run scoring? (yes/no): ").strip().lower()
+        if ans in ["yes", "y"]:
+            for i in range(0, len(pool), 20):
+                score_batch(pool[i:i+20])
+                print(f"  Scored {min(i+20, len(pool))}/{len(pool)}")
+                time.sleep(1)
+        else:
+            print("  Skipped. All candidates will be saved unscored.")
     else:
-        print("  Skipped scoring. Leads are live unscored.")
+        print("  No CLAUDE_API_KEY — skipping scoring")
 
+    # ── Filter to qualified leads ─────────────────────────────────────────────
+    qualified = sorted(
+        [a for a in pool if (a.get("score") or 0) >= MIN_SCORE and _passes_hard_filter(a)],
+        key=lambda x: x.get("score", 0), reverse=True
+    )
+    # If scoring was skipped, take top TARGET_LEADS by listeners
+    if not qualified:
+        qualified = [a for a in pool if _passes_hard_filter(a)][:TARGET_LEADS]
+
+    new_leads = qualified[:TARGET_LEADS]
+
+    print(f"\n  Qualified (score >= {MIN_SCORE}): {len(qualified)}")
+    print(f"  Saving top {len(new_leads)} to dashboard\n")
+    print(f"  {'Score':<6} {'Name':<28} {'Listeners':<12} {'Genres'}")
+    print("  " + "─"*65)
+    for a in new_leads[:20]:
+        genre = ", ".join(a.get("genres", [])[:2]) or "—"
+        score = a.get("score") or "—"
+        print(f"  [{str(score):>3}]  {a['name']:<28} {str(a.get('listeners',0)):<12} {genre}")
+
+    if not new_leads:
+        print("  No qualified leads — try adjusting MIN_SCORE or adding new keywords.")
+        return
+
+    # ── Save — scores already set, so Supabase gets full data ────────────────
+    save(new_leads, session_id)
+    print(f"\n  {len(new_leads)} leads live. Enrichment worker will find Instagrams.")
     print("\n" + "="*60)
     print(f"  Session {session_id} complete.")
     print("="*60 + "\n")
