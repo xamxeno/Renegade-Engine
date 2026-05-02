@@ -40,6 +40,25 @@ const PRODUCER_KEYWORDS = [
   'studio engineer','tracking engineer','mix engineer','beat store','beatz',
 ]
 
+// Bios that explicitly block cold outreach or signal the artist is already unreachable
+const OUTREACH_BLOCKER_KEYWORDS = [
+  // explicitly blocking unsolicited DMs
+  'no dms', 'no dm', 'no unsolicited', 'no soliciting', 'no solicitation',
+  'no cold', 'not accepting dms', 'dm closed', 'dms closed',
+  // gatekeeper / management wall
+  'bookings only', 'booking inquiries only', 'for bookings contact',
+  'management only', 'contact management', 'contact my management',
+  'all inquiries', 'business inquiries only', 'business only',
+  'inquiries only', 'for features contact', 'for collabs contact',
+  // already signed / label deal
+  'signed to ', 'signed with ', 'signed artist', 'major label',
+  'represented by', 'managed by ',
+  // too established to be a target
+  'grammy nominated', 'grammy award', 'grammy winner', 'grammy winning',
+  'platinum certified', 'gold certified', 'riaa certified',
+  'billboard #1', 'top 40 artist', 'topping charts',
+]
+
 // Check bio/description text for producer signals (word-boundary DJ match)
 function isProducerText (text) {
   if (!text) return false
@@ -56,6 +75,13 @@ function isProducerUsername (handle) {
   if (/^dj[^a-z]/i.test(h) || h.startsWith('dj') && h.length > 2) return true
   // concatenated forms: "beatmaker" → "beatmaker", "producer" → "producer"
   return PRODUCER_KEYWORDS.some(kw => h.includes(kw.replace(/\s+/g, '')))
+}
+
+// Check if bio signals the artist won't respond to cold outreach
+function isOutreachBlocked (text) {
+  if (!text) return false
+  const t = text.toLowerCase()
+  return OUTREACH_BLOCKER_KEYWORDS.some(kw => t.includes(kw))
 }
 
 function fetchIGPage (handle) {
@@ -106,7 +132,11 @@ function parseIGPage (html) {
     if (bioEmailM) email = bioEmailM[0]
   }
 
-  return { followers, bio, email }
+  // Private account flag — private = must follow first before DMs work
+  const privateM = html.match(/"is_private"\s*:\s*(true|false)/)
+  const isPrivate = privateM ? privateM[1] === 'true' : false
+
+  return { followers, bio, email, isPrivate }
 }
 
 async function fetchSpotifyBio (profileUrl) {
@@ -134,9 +164,10 @@ async function verifyWorker () {
         fetchIGPage(handle),
         new Promise(r => setTimeout(() => r(''), 15000))
       ])
-      const { followers, bio, email } = parseIGPage(html)
+      const { followers, bio, email, isPrivate } = parseIGPage(html)
 
       let quality = 'verified'
+      let skipReason = ''
       const updates = { updated_at: new Date().toISOString() }
       if (followers !== null) updates.ig_followers = followers
       if (email) { updates.email = email; console.log(`[Verify] ${name} — email found: ${email}`) }
@@ -145,21 +176,26 @@ async function verifyWorker () {
         // IG blocked — fall back to Spotify bio check before trusting the handle
         const spotifyBio = profile_url ? await fetchSpotifyBio(profile_url) : ''
         if (isProducerText(spotifyBio)) {
-          quality = 'skip'
-          console.log(`[Verify] ${name} — producer detected in Spotify bio (IG blocked)`)
+          quality = 'skip'; skipReason = 'producer (Spotify bio)'
+        } else if (isOutreachBlocked(spotifyBio)) {
+          quality = 'skip'; skipReason = 'outreach blocked (Spotify bio)'
         } else {
           quality = 'verified'
           console.log(`[Verify] ${name} @${handle} — IG blocked, trusting handle`)
         }
       } else if (followers !== null && followers > 500000) {
-        quality = 'skip'
-        console.log(`[Verify] ${name} — too large (${followers.toLocaleString()} followers)`)
+        quality = 'skip'; skipReason = `too large (${followers.toLocaleString()} followers)`
       } else if (isProducerText(bio)) {
-        quality = 'skip'
-        console.log(`[Verify] ${name} — producer detected in IG bio`)
+        quality = 'skip'; skipReason = 'producer in IG bio'
+      } else if (isOutreachBlocked(bio)) {
+        quality = 'skip'; skipReason = 'outreach blocked in IG bio'
+      } else if (isPrivate && !email) {
+        quality = 'skip'; skipReason = 'private account, no email — unreachable'
       } else {
-        console.log(`[Verify] ${name} @${handle} — VERIFIED (${followers?.toLocaleString() ?? '?'} followers)${email ? ' +email' : ''}`)
+        console.log(`[Verify] ${name} @${handle} — VERIFIED (${followers?.toLocaleString() ?? '?'} followers)${email ? ' +email' : ''}${isPrivate ? ' (private, has email)' : ''}`)
       }
+
+      if (skipReason) console.log(`[Verify] ${name} — SKIP: ${skipReason}`)
 
       updates.contact_quality = quality
       await supabase.from('artists').update(updates).eq('id', id)
@@ -940,29 +976,31 @@ app.post('/api/artists/rescan-all', async (req, res) => {
   }
 })
 
-// POST /api/artists/scan-bios — fetch IG pages for a list of artist IDs and DELETE producers/DJs
-// Checks username, IG bio (with og:description fallback), and Spotify bio. Hard-deletes matches.
+// POST /api/artists/scan-bios — scan visible leads and DELETE:
+//   • producers / DJs (username, IG bio, Spotify bio)
+//   • bios that block cold outreach ("no dms", "bookings only", "signed to X", etc.)
+//   • private accounts with no email (unreachable — DMs require follow-back)
 let _bioScanStats = { total: 0, processed: 0, flagged: 0, current: null, running: false }
 
 async function runBioScan(ids) {
   _bioScanStats = { total: ids.length, processed: 0, flagged: 0, current: null, running: true }
   console.log(`[BioScan] Starting scan of ${ids.length} artists`)
 
-  const { data: artists, error } = await supabase.from('artists').select('id,name,instagram,profile_url,platform').in('id', ids)
+  const { data: artists, error } = await supabase.from('artists').select('id,name,instagram,email,profile_url,platform').in('id', ids)
   if (error || !artists) { _bioScanStats.running = false; return }
 
   for (const artist of artists) {
     _bioScanStats.current = artist.name
     const handle = (artist.instagram || '').trim()
     let flagged = false
-    let source = ''
+    let reason = ''
 
-    // 1. Check username itself
+    // 1. Check username for producer/DJ patterns
     if (handle && isProducerUsername(handle)) {
-      flagged = true; source = 'username'
+      flagged = true; reason = 'producer username'
     }
 
-    // 2. Try IG bio (parseIGPage now tries biography JSON + og:description fallback)
+    // 2. Fetch IG page — check bio for producer, outreach blocker, private+no-email
     if (!flagged && handle) {
       try {
         const html = await Promise.race([
@@ -970,9 +1008,18 @@ async function runBioScan(ids) {
           new Promise(r => setTimeout(() => r(''), 15000))
         ])
         if (html && html.length > 500) {
-          const { bio } = parseIGPage(html)
+          const { bio, email: igEmail, isPrivate } = parseIGPage(html)
+          // Save email if found and not already stored
+          if (igEmail && !artist.email) {
+            await supabase.from('artists').update({ email: igEmail }).eq('id', artist.id)
+          }
+          const hasEmail = !!(igEmail || artist.email)
           if (isProducerText(bio)) {
-            flagged = true; source = 'ig_bio'
+            flagged = true; reason = 'producer in IG bio'
+          } else if (isOutreachBlocked(bio)) {
+            flagged = true; reason = 'outreach blocked in IG bio'
+          } else if (isPrivate && !hasEmail) {
+            flagged = true; reason = 'private account, no email — unreachable'
           }
         }
       } catch {}
@@ -982,14 +1029,16 @@ async function runBioScan(ids) {
     if (!flagged && artist.profile_url) {
       const spotifyBio = await fetchSpotifyBio(artist.profile_url)
       if (isProducerText(spotifyBio)) {
-        flagged = true; source = 'spotify_bio'
+        flagged = true; reason = 'producer in Spotify bio'
+      } else if (isOutreachBlocked(spotifyBio)) {
+        flagged = true; reason = 'outreach blocked in Spotify bio'
       }
     }
 
     if (flagged) {
       await supabase.from('artists').delete().eq('id', artist.id)
       _bioScanStats.flagged++
-      console.log(`[BioScan] Deleted ${artist.name} — producer/DJ detected via ${source}`)
+      console.log(`[BioScan] Deleted ${artist.name} — ${reason}`)
     }
     _bioScanStats.processed++
     await new Promise(r => setTimeout(r, 800))
