@@ -1689,6 +1689,76 @@ app.get('/api/discovery/status', (req, res) => {
   res.json({ running: _discovery.running, progress: _discovery.progress, logLines: _discovery.log.length })
 })
 
+// ── Instagram Discovery ────────────────────────────────────────────────────────
+let _igDiscovery = { running: false, py: null, log: [], progress: 0, clients: [] }
+
+function igDiscoveryBroadcast(obj) {
+  const line = JSON.stringify(obj) + "\n"
+  _igDiscovery.clients = _igDiscovery.clients.filter(r => !r.writableEnded)
+  _igDiscovery.clients.forEach(r => { try { r.write(line) } catch {} })
+}
+
+app.post('/api/insta-discover', (req, res) => {
+  res.setHeader('Content-Type', 'application/x-ndjson')
+  res.setHeader('Transfer-Encoding', 'chunked')
+  res.setHeader('Cache-Control', 'no-cache')
+
+  if (_igDiscovery.running) {
+    _igDiscovery.log.forEach(obj => { try { res.write(JSON.stringify(obj) + "\n") } catch {} })
+    _igDiscovery.clients.push(res)
+    req.on('close', () => { _igDiscovery.clients = _igDiscovery.clients.filter(r => r !== res) })
+    return
+  }
+
+  _igDiscovery = { running: true, py: null, log: [], progress: 0, clients: [res] }
+
+  const scriptPath = path.join(__dirname, '../discovery/insta_discovery.py')
+  const py = spawn('python', [scriptPath, '--no-prompt'], { cwd: path.join(__dirname, '../discovery') })
+  _igDiscovery.py = py
+
+  const emit = obj => { _igDiscovery.log.push(obj); igDiscoveryBroadcast(obj) }
+
+  let lineBuffer = ""
+  py.stdout.on('data', chunk => {
+    lineBuffer += chunk.toString()
+    const lines = lineBuffer.split('\n')
+    lineBuffer = lines.pop()
+    for (const line of lines) {
+      if (!line.trim()) continue
+      const logObj = { log: line }
+      if (line.includes('complete')) { logObj.progress = 100 }
+      emit(logObj)
+    }
+  })
+
+  py.stderr.on('data', chunk => {
+    for (const line of chunk.toString().split('\n')) {
+      if (line.trim()) emit({ log: `[err] ${line}` })
+    }
+  })
+
+  py.on('close', () => {
+    emit({ progress: 100, done: true, log: '=== Instagram Discovery finished ===' })
+    _igDiscovery.running = false
+    _igDiscovery.py = null
+    _igDiscovery.clients.forEach(r => { try { r.end() } catch {} })
+    _igDiscovery.clients = []
+  })
+
+  py.on('error', err => {
+    emit({ log: `ERROR: ${err.message}`, done: true })
+    _igDiscovery.running = false
+    _igDiscovery.clients.forEach(r => { try { r.end() } catch {} })
+    _igDiscovery.clients = []
+  })
+
+  req.on('close', () => { _igDiscovery.clients = _igDiscovery.clients.filter(r => r !== res) })
+})
+
+app.get('/api/insta-discover/status', (req, res) => {
+  res.json({ running: _igDiscovery.running, progress: _igDiscovery.progress, logLines: _igDiscovery.log.length })
+})
+
 // GET /api/verify-status
 app.get('/api/verify-status', (req, res) => {
   res.json({

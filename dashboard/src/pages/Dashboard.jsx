@@ -59,6 +59,10 @@ export default function Dashboard({ API, onSelect }) {
   const [discoveryRunning, setDiscoveryRunning] = useState(false)
   const [discoveryLog, setDiscoveryLog] = useState([])
   const [discoveryProgress, setDiscoveryProgress] = useState(0)
+  const [instaDiscoveryOpen, setInstaDiscoveryOpen] = useState(false)
+  const [instaDiscoveryRunning, setInstaDiscoveryRunning] = useState(false)
+  const [instaDiscoveryLog, setInstaDiscoveryLog] = useState([])
+  const [instaDiscoveryProgress, setInstaDiscoveryProgress] = useState(0)
   const [verifyStatus, setVerifyStatus] = useState(null)
 
   const searchTimer = useRef(null)
@@ -282,6 +286,36 @@ export default function Dashboard({ API, onSelect }) {
 
   const runDiscovery = () => streamDiscovery(true)
 
+  const streamInstaDiscovery = async (fresh) => {
+    setInstaDiscoveryRunning(true)
+    if (fresh) { setInstaDiscoveryLog([]); setInstaDiscoveryProgress(0) }
+    try {
+      const r = await fetch(`${API}/api/insta-discover`, { method: 'POST' })
+      const reader = r.body.getReader()
+      const dec = new TextDecoder()
+      let buf = ""
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += dec.decode(value, { stream: true })
+        const lines = buf.split("\n")
+        buf = lines.pop()
+        for (const line of lines) {
+          if (!line.trim()) continue
+          try {
+            const msg = JSON.parse(line)
+            if (msg.log)                   setInstaDiscoveryLog(l => [...l, msg.log])
+            if (msg.progress !== undefined) setInstaDiscoveryProgress(msg.progress)
+            if (msg.done)                  { fetchArtists(); loadSessions() }
+          } catch { setInstaDiscoveryLog(l => [...l, line]) }
+        }
+      }
+    } catch (e) { setInstaDiscoveryLog(l => [...l, `Error: ${e.message}`]) }
+    setInstaDiscoveryRunning(false)
+  }
+
+  const runInstaDiscovery = () => streamInstaDiscovery(true)
+
   // On mount — check if discovery is already running (page was closed mid-run)
   useEffect(() => {
     fetch(`${API}/api/discovery/status`)
@@ -292,6 +326,20 @@ export default function Dashboard({ API, onSelect }) {
           setDiscoveryLog([`● Reconnected — discovery already running (${d.logLines} lines logged)`])
           setDiscoveryProgress(d.progress || 0)
           streamDiscovery(false)
+        }
+      })
+      .catch(() => {})
+  }, [API])
+
+  useEffect(() => {
+    fetch(`${API}/api/insta-discover/status`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.running) {
+          setInstaDiscoveryOpen(true)
+          setInstaDiscoveryLog([`● Reconnected — Instagram discovery running (${d.logLines} lines logged)`])
+          setInstaDiscoveryProgress(d.progress || 0)
+          streamInstaDiscovery(false)
         }
       })
       .catch(() => {})
@@ -652,11 +700,13 @@ export default function Dashboard({ API, onSelect }) {
   const unverifiedArtists = sortedArtists.filter(a => !a.instagram && a.contact_quality !== 'skip')
   const inProgressArtists = sortedArtists.filter(a => a.contact_quality === 'verifying' && a.instagram)
   const flaggedArtists    = sortedArtists.filter(a => a.contact_quality === 'skip')
+  const instagramArtists  = sortedArtists.filter(a => a.platform === 'instagram' && a.contact_quality !== 'skip')
   const displayedArtists  =
-    activeTab === "verified"    ? verifiedArtists :
-    activeTab === "unverified"  ? unverifiedArtists :
-    activeTab === "inprogress"  ? inProgressArtists :
-    activeTab === "flagged"     ? flaggedArtists :
+    activeTab === "verified"     ? verifiedArtists :
+    activeTab === "unverified"   ? unverifiedArtists :
+    activeTab === "inprogress"   ? inProgressArtists :
+    activeTab === "flagged"      ? flaggedArtists :
+    activeTab === "direct_insta" ? instagramArtists :
     allLeads
 
   return (
@@ -772,6 +822,57 @@ export default function Dashboard({ API, onSelect }) {
                 style={{ background: discoveryRunning ? "#1a1a2a" : "linear-gradient(135deg,#4411bb,#1DB954)", border: "none", borderRadius: 8, padding: "9px 26px", color: discoveryRunning ? "#444" : "#fff", fontSize: 13, fontWeight: 700, cursor: discoveryRunning ? "default" : "pointer", letterSpacing: "0.02em" }}
               >
                 {discoveryRunning ? "Running..." : "Start Discovery"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Insta Discovery Modal ── */}
+      {instaDiscoveryOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ background: "rgba(13,13,13,0.88)", border: "1px solid #4a1a6a", borderRadius: 16, padding: "2rem", width: "min(620px, 92vw)", display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ color: "#fff", fontWeight: 700, fontSize: 17, letterSpacing: "-0.02em" }}>Instagram Discovery</div>
+                <div style={{ color: "#555", fontSize: 12, marginTop: 3 }}>Finds unsigned artists directly on Instagram · 1K–100K followers · USA, Canada, UK, Australia, UAE</div>
+              </div>
+              {!instaDiscoveryRunning && <button onClick={() => { setInstaDiscoveryOpen(false); setInstaDiscoveryLog([]); setInstaDiscoveryProgress(0) }} style={{ background: "transparent", border: "none", color: "#555", fontSize: 22, cursor: "pointer" }}>×</button>}
+            </div>
+
+            <div style={{ background: "rgba(17,17,17,0.82)", borderRadius: 99, height: 6, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${instaDiscoveryProgress}%`, background: "linear-gradient(90deg,#880066,#ee44cc)", borderRadius: 99, transition: "width 0.4s ease" }} />
+            </div>
+            <div style={{ color: "#444", fontSize: 11, textAlign: "right", marginTop: -10 }}>{instaDiscoveryProgress}%</div>
+
+            <div
+              ref={el => { if (el) el.scrollTop = el.scrollHeight }}
+              style={{ background: "#050505", border: "0.5px solid #1a1a1a", borderRadius: 8, padding: "12px", height: 260, overflowY: "auto", fontFamily: "monospace", fontSize: 11, color: "#555", display: "flex", flexDirection: "column", gap: 2 }}
+            >
+              {instaDiscoveryLog.length === 0 && !instaDiscoveryRunning && (
+                <span style={{ color: "#333" }}>Click Start to search Instagram for unsigned artists via web search.</span>
+              )}
+              {instaDiscoveryLog.map((line, i) => (
+                <div key={i} style={{ color: line.includes("ERROR") || line.includes("error") ? "#f44336" : line.includes("PASS") || line.includes("complete") || line.includes("Synced") ? "#4caf50" : line.includes("skip") || line.includes("Skip") || line.includes("blocked") ? "#555" : "#888" }}>{line}</div>
+              ))}
+              {instaDiscoveryRunning && <div style={{ color: "#cc44aa", animation: "pulse 1s infinite" }}>● running...</div>}
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              {!instaDiscoveryRunning && (
+                <button onClick={() => { setInstaDiscoveryOpen(false); setInstaDiscoveryLog([]); setInstaDiscoveryProgress(0) }} style={{ background: "#1a1a1a", border: "0.5px solid #333", borderRadius: 8, padding: "9px 20px", color: "#888", fontSize: 13, cursor: "pointer" }}>Close</button>
+              )}
+              {instaDiscoveryRunning && (
+                <button onClick={() => setInstaDiscoveryOpen(false)} style={{ background: "#0a0a1a", border: "0.5px solid #2a1a3a", borderRadius: 8, padding: "9px 20px", color: "#8844cc", fontSize: 13, cursor: "pointer" }} title="Discovery keeps running — reopen anytime">
+                  Run in Background
+                </button>
+              )}
+              <button
+                onClick={runInstaDiscovery}
+                disabled={instaDiscoveryRunning}
+                style={{ background: instaDiscoveryRunning ? "#1a1a2a" : "linear-gradient(135deg,#880066,#cc44aa)", border: "none", borderRadius: 8, padding: "9px 26px", color: instaDiscoveryRunning ? "#444" : "#fff", fontSize: 13, fontWeight: 700, cursor: instaDiscoveryRunning ? "default" : "pointer", letterSpacing: "0.02em" }}
+              >
+                {instaDiscoveryRunning ? "Running..." : "Start Discovery"}
               </button>
             </div>
           </div>
@@ -1060,6 +1161,10 @@ export default function Dashboard({ API, onSelect }) {
                 {discoveryRunning && <span style={{ position: "absolute", top: 5, right: 5, width: 6, height: 6, borderRadius: "50%", background: "#4caf50", animation: "pulse 1.5s infinite" }} />}
                 + Discovery
               </button>
+              <button onClick={() => setInstaDiscoveryOpen(true)} style={btnStyle("linear-gradient(135deg,#1a0525,#2a0a1a)", `1px solid ${instaDiscoveryRunning ? "#cc44aaaa" : "#cc44aa44"}`, "#ee88dd", { fontWeight: 700, letterSpacing: "0.02em", position: "relative" })}>
+                {instaDiscoveryRunning && <span style={{ position: "absolute", top: 5, right: 5, width: 6, height: 6, borderRadius: "50%", background: "#4caf50", animation: "pulse 1.5s infinite" }} />}
+                + Insta Discovery
+              </button>
               <button onClick={() => setSpotifyDumpOpen(true)} style={btnStyle("#0a1a0f", "0.5px solid #1DB95433", "#1DB954")}>
                 Spotify
               </button>
@@ -1173,11 +1278,12 @@ export default function Dashboard({ API, onSelect }) {
       {/* ── Tabs ── */}
       <div style={{ display: "flex", gap: 4, marginBottom: "1rem", borderBottom: "0.5px solid #1f1f1f", paddingBottom: 0, flexWrap: "wrap" }}>
         {[
-          ["all",         "All Leads",          allLeads.length],
-          ["verified",    "Verified Contacts",  verifiedArtists.length],
-          ["unverified",  "Unverified",         unverifiedArtists.length],
-          ["flagged",     "Flagged",            flaggedArtists.length],
-          ["inprogress",  "In Progress",        inProgressArtists.length],
+          ["all",          "All Leads",          allLeads.length],
+          ["verified",     "Verified Contacts",  verifiedArtists.length],
+          ["unverified",   "Unverified",         unverifiedArtists.length],
+          ["direct_insta", "Direct Insta",       instagramArtists.length],
+          ["flagged",      "Flagged",            flaggedArtists.length],
+          ["inprogress",   "In Progress",        inProgressArtists.length],
         ].map(([tab, label, count]) => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
             background: "transparent", border: "none",
@@ -1220,6 +1326,7 @@ export default function Dashboard({ API, onSelect }) {
           style={{ background: "rgba(17,17,17,0.82)", border: "0.5px solid #222", borderRadius: 8, padding: "8px 12px", color: "#888", fontSize: 13 }}>
           <option value="">All platforms</option>
           <option value="spotify">Spotify</option>
+          <option value="instagram">Instagram</option>
         </select>
         <select value={sortBy} onChange={e => setSortBy(e.target.value)}
           style={{ background: "rgba(17,17,17,0.82)", border: "0.5px solid #222", borderRadius: 8, padding: "8px 12px", color: "#ccc", fontSize: 13 }}>

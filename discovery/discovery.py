@@ -367,16 +367,31 @@ def sp(endpoint, params=None):
     token = get_token()
     if not token:
         return {}
-    try:
-        r = requests.get(
-            f"https://api.spotify.com/v1/{endpoint}",
-            headers={"Authorization": f"Bearer {token}"},
-            params=params or {}, timeout=12)
-        if r.status_code != 200:
+    for attempt in range(3):
+        try:
+            r = requests.get(
+                f"https://api.spotify.com/v1/{endpoint}",
+                headers={"Authorization": f"Bearer {token}"},
+                params=params or {}, timeout=12)
+            if r.status_code == 200:
+                return r.json()
+            if r.status_code == 429:
+                wait = int(r.headers.get("Retry-After", 10))
+                if wait > 30:
+                    print(f"  [Spotify] Rate limited ({wait}s) — skipping call, continuing run")
+                    return {}
+                print(f"  [Spotify] Rate limited — waiting {wait}s")
+                time.sleep(wait)
+                continue
+            if r.status_code not in (404,):
+                print(f"  [Spotify] {endpoint}: HTTP {r.status_code}")
             return {}
-        return r.json()
-    except:
-        return {}
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(2)
+                continue
+            return {}
+    return {}
 
 SP_PAGE_HEADERS = {"User-Agent": "Twitterbot/1.0"}
 
@@ -477,17 +492,60 @@ def spotify_keyword_search(query, pages=4):
 # Searches playlists by genre/style, pulls artists from tracks.
 # Reaches artists that never show up in name-based artist search.
 PLAYLIST_SEARCHES = [
-    "new rnb 2024", "new rnb 2025", "underground rnb",
-    "trap soul 2024", "trap soul 2025", "neo soul 2024",
+    # ── Year-dated — fresh artists actively releasing ─────────────────────────
+    "new rnb 2025", "new rnb 2024", "underground rnb 2025",
+    "trap soul 2025", "trap soul 2024", "neo soul 2025",
+    "new hip hop 2025", "new hip hop 2024", "melodic rap 2025",
+    "unsigned artists 2025", "emerging rnb 2025", "new rap 2025",
+    # ── Vibe/mood — broad reach into different curation communities ───────────
     "bedroom rnb", "dark rnb", "alternative rnb",
-    "new hip hop 2024", "new hip hop 2025", "melodic rap 2024",
     "underground hip hop", "conscious rap", "emotional rap",
     "lo fi rnb", "acoustic rnb", "guitar rnb",
-    "new uk rnb", "uk rap 2024", "uk drill melodic",
-    "new toronto rnb", "canadian rnb", "australian hip hop",
-    "indie rnb", "chill rnb", "late night rnb",
-    "slow jam 2024", "heartbreak rnb", "sad rap",
-    "street soul", "gritty rap", "real rap 2024",
+    "late night rnb", "late night vibes", "3am playlist",
+    "heartbreak rnb", "heartbreak rap", "sad rap",
+    "chill rnb", "vibes rnb", "smooth rnb",
+    "slow jam", "slow jam rnb", "bedroom soul",
+    # ── Regional — hits different curator pools ────────────────────────────────
+    "new uk rnb", "uk rap 2025", "uk drill melodic",
+    "new toronto rnb", "canadian rnb", "toronto trap soul",
+    "australian hip hop", "australian rnb", "melbourne rap",
+    "dubai rnb", "uk unsigned artists",
+    # ── Underground / indie framing ────────────────────────────────────────────
+    "indie rnb", "indie soul", "indie rap",
+    "independent rnb", "independent rap", "independent artists rnb",
+    "street soul", "gritty rap", "real rap",
+    "underground trap", "underground soul", "underground vibes",
+    # ── Genre adjacent — wider net ─────────────────────────────────────────────
+    "neo soul 2025", "neo soul artists",
+    "trap rnb", "trap soul artists", "melodic trap",
+    "gospel rap", "acoustic soul", "folk rnb",
+    "afro soul", "afro rnb", "afrobeats uk",
+]
+
+# ── GENRE-TAG ARTIST SEARCHES ──────────────────────────────────────────────────
+# Uses Spotify's genre: filter in /v1/search — finds artists by their Spotify genre tag.
+# Unlike name-based keyword search, this surfaces artists whose music IS the genre
+# even if the genre word doesn't appear in their name.
+# tag:hipster = Spotify's filter for less mainstream / underground artists.
+GENRE_TAG_SEARCHES = [
+    "genre:r-n-b",
+    "genre:r-n-b tag:hipster",
+    "genre:trap-soul",
+    "genre:neo-soul",
+    "genre:neo-soul tag:hipster",
+    "genre:alternative-r-b",
+    "genre:hip-hop tag:hipster",
+    "genre:soul tag:hipster",
+    "genre:trap tag:hipster",
+    "genre:uk-r-n-b",
+    "genre:uk-drill",
+    "genre:melodic-rap",
+    "genre:canadian-hip-hop",
+    "genre:australian-hip-hop",
+    "genre:conscious-hip-hop",
+    "genre:underground-hip-hop",
+    "genre:lo-fi-hip-hop",
+    "genre:drill",
 ]
 
 def spotify_playlist_search(query, max_playlists=5, max_tracks=50):
@@ -559,6 +617,263 @@ def spotify_playlist_search(query, max_playlists=5, max_tracks=50):
 
     if artists_out:
         print(f"    playlist '{query}': {len(artists_out)} artists from {len(playlists)} playlists")
+    return artists_out
+
+
+# ── NEW SPOTIFY DISCOVERY SOURCES ─────────────────────────────────────────────
+
+def get_seed_ids_from_db(min_score=70, platform="spotify", limit=30):
+    """Fetch high-scoring artist IDs from Supabase to seed related-artist expansion."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return []
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+    }
+    try:
+        r = requests.get(
+            f"{SUPABASE_URL}/rest/v1/artists",
+            headers=headers,
+            params={
+                "select": "platform_id",
+                "platform": f"eq.{platform}",
+                "score": f"gte.{min_score}",
+                "order": "score.desc",
+                "limit": limit,
+            },
+            timeout=15)
+        data = r.json()
+        if not isinstance(data, list):
+            return []
+        return [a["platform_id"] for a in data if a.get("platform_id")]
+    except:
+        return []
+
+
+def spotify_recommendations():
+    """Discover artists via Spotify's recommendations API — genre + popularity targeting."""
+    genre_batches = [
+        ["r-n-b", "hip-hop", "soul", "funk", "groove"],
+        ["neo-soul", "trap", "singer-songwriter", "pop", "acoustic"],
+    ]
+    artists_out = []
+    seen_aids = set()
+
+    for batch in genre_batches:
+        data = sp("recommendations", {
+            "seed_genres": ",".join(batch),
+            "min_popularity": 10,
+            "max_popularity": 45,
+            "limit": 100,
+            "market": "US",
+        })
+        tracks = data.get("tracks", []) or []
+        for track in tracks:
+            artist_stub = (track.get("artists") or [{}])[0]
+            aid = artist_stub.get("id", "")
+            if not aid or aid in seen_aids:
+                continue
+            seen_aids.add(aid)
+
+            full = sp(f"artists/{aid}")
+            if not full:
+                continue
+            name = full.get("name", "").strip()
+            if not name or is_junk(name):
+                continue
+
+            sp_followers = full.get("followers", {}).get("total") or 0
+            sp_popularity = full.get("popularity") or 0
+            genres = full.get("genres", []) or []
+
+            if sp_followers > MAX_FOLLOWERS or sp_popularity > 65:
+                continue
+            if is_blocked(genres, name=name):
+                continue
+
+            if sp_followers == 0:
+                continue
+            listeners = sp_followers if sp_followers >= MIN_LISTENERS else max(sp_followers * 8, MIN_LISTENERS)
+
+            profile_url = full.get("external_urls", {}).get("spotify", "")
+            image_url   = full["images"][0]["url"] if full.get("images") else ""
+            artists_out.append(make_artist(name, "spotify", aid,
+                                           followers=sp_followers, listeners=listeners,
+                                           genres=genres[:5], profile_url=profile_url,
+                                           image_url=image_url))
+            time.sleep(0.15)
+
+        time.sleep(0.5)
+
+    print(f"  recommendations: {len(artists_out)} artists")
+    return artists_out
+
+
+def spotify_related_artists(seed_ids):
+    """Expand discovery via Spotify's related-artists graph from high-scoring leads."""
+    if not seed_ids:
+        return []
+    artists_out = []
+    seen_aids = set(seed_ids)  # don't re-add the seeds themselves
+
+    for seed_id in seed_ids:
+        data = sp(f"artists/{seed_id}/related-artists")
+        related = data.get("artists", []) or []
+
+        for full in related:
+            if not full:
+                continue
+            aid = full.get("id", "")
+            if not aid or aid in seen_aids:
+                continue
+            seen_aids.add(aid)
+
+            name = full.get("name", "").strip()
+            if not name or is_junk(name):
+                continue
+
+            sp_followers = full.get("followers", {}).get("total") or 0
+            sp_popularity = full.get("popularity") or 0
+            genres = full.get("genres", []) or []
+
+            if sp_followers > MAX_FOLLOWERS or sp_popularity > 65:
+                continue
+            if is_blocked(genres, name=name):
+                continue
+
+            if sp_followers == 0:
+                continue
+            listeners = sp_followers if sp_followers >= MIN_LISTENERS else max(sp_followers * 8, MIN_LISTENERS)
+
+            profile_url = full.get("external_urls", {}).get("spotify", "")
+            image_url   = full["images"][0]["url"] if full.get("images") else ""
+            artists_out.append(make_artist(name, "spotify", aid,
+                                           followers=sp_followers, listeners=listeners,
+                                           genres=genres[:5], profile_url=profile_url,
+                                           image_url=image_url))
+            time.sleep(0.15)
+
+        time.sleep(0.3)
+
+    print(f"  related artists: {len(seed_ids)} seeds → {len(artists_out)} candidates")
+    return artists_out
+
+
+def spotify_category_playlists(max_playlists_per_cat=5, max_tracks=50):
+    """Pull editorial Spotify playlists — higher curation quality than user-made playlists."""
+    categories = ["hiphop", "rnb", "soul", "workout", "party"]
+    artists_out = []
+    seen_aids = set()
+
+    for cat_id in categories:
+        data = sp(f"browse/categories/{cat_id}/playlists", {
+            "limit": max_playlists_per_cat,
+            "country": "US",
+        })
+        playlists = data.get("playlists", {}).get("items", []) or []
+
+        for pl in playlists:
+            if not pl:
+                continue
+            pl_id = pl.get("id", "")
+            if not pl_id:
+                continue
+
+            tracks_data = sp(f"playlists/{pl_id}/tracks", {
+                "limit": max_tracks, "fields": "items(track(artists,id))", "market": "US"
+            })
+            items = tracks_data.get("items", []) or []
+
+            for item in items:
+                track = item.get("track") or {}
+                for artist_stub in (track.get("artists") or []):
+                    aid = artist_stub.get("id", "")
+                    name = artist_stub.get("name", "").strip()
+                    if not aid or not name or aid in seen_aids:
+                        continue
+                    if is_junk(name):
+                        continue
+                    seen_aids.add(aid)
+
+                    full = sp(f"artists/{aid}")
+                    if not full:
+                        continue
+                    sp_followers = full.get("followers", {}).get("total") or 0
+                    sp_popularity = full.get("popularity") or 0
+                    genres = full.get("genres", []) or []
+
+                    if sp_followers > MAX_FOLLOWERS or sp_popularity > 65:
+                        continue
+                    if is_blocked(genres, name=name):
+                        continue
+
+                    if sp_followers == 0:
+                        continue
+                    listeners = sp_followers if sp_followers >= MIN_LISTENERS else max(sp_followers * 8, MIN_LISTENERS)
+
+                    profile_url = full.get("external_urls", {}).get("spotify", "")
+                    image_url   = full["images"][0]["url"] if full.get("images") else ""
+                    artists_out.append(make_artist(name, "spotify", aid,
+                                                   followers=sp_followers, listeners=listeners,
+                                                   genres=genres[:5], profile_url=profile_url,
+                                                   image_url=image_url))
+                    time.sleep(0.15)
+
+            time.sleep(0.3)
+
+        time.sleep(0.5)
+
+    print(f"  category playlists: {len(categories)} cats → {len(artists_out)} candidates")
+    return artists_out
+
+
+def spotify_new_releases(max_albums=50):
+    """Find artists who just released — actively promoting = open to outreach."""
+    artists_out = []
+    seen_aids = set()
+
+    data = sp("browse/new-releases", {"market": "US", "limit": max_albums})
+    albums = data.get("albums", {}).get("items", []) or []
+
+    for album in albums:
+        if not album:
+            continue
+        for artist_stub in (album.get("artists") or []):
+            aid = artist_stub.get("id", "")
+            if not aid or aid in seen_aids:
+                continue
+            seen_aids.add(aid)
+
+            full = sp(f"artists/{aid}")
+            if not full:
+                continue
+            name = full.get("name", "").strip()
+            if not name or is_junk(name):
+                continue
+
+            sp_followers = full.get("followers", {}).get("total") or 0
+            sp_popularity = full.get("popularity") or 0
+            genres = full.get("genres", []) or []
+
+            # Stricter popularity cap — new releases surface more mid-tier signed artists
+            if sp_followers > MAX_FOLLOWERS or sp_popularity > 45:
+                continue
+            if is_blocked(genres, name=name):
+                continue
+
+            if sp_followers == 0:
+                continue
+            listeners = sp_followers if sp_followers >= MIN_LISTENERS else max(sp_followers * 8, MIN_LISTENERS)
+
+            profile_url = full.get("external_urls", {}).get("spotify", "")
+            image_url   = full["images"][0]["url"] if full.get("images") else ""
+            artists_out.append(make_artist(name, "spotify", aid,
+                                           followers=sp_followers, listeners=listeners,
+                                           genres=genres[:5], profile_url=profile_url,
+                                           image_url=image_url))
+            time.sleep(0.15)
+
+    print(f"  new releases: {len(albums)} albums → {len(artists_out)} artists")
     return artists_out
 
 
@@ -825,32 +1140,48 @@ def run():
             seen_in_session.add(name)
             all_candidates.append(a)
 
-    print("\n[1/1] Spotify...")
+    print("\n[Spotify — 3-source discovery pipeline]")
     if SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET:
-        kw_stats = load_keyword_stats()
-        ordered_queries = weighted_shuffle(SPOTIFY_KEYWORD_SEARCHES, kw_stats)
-        for i, query in enumerate(ordered_queries, 1):
-            before = len(all_candidates)
-            found = spotify_keyword_search(query)
-            add(found)
-            after = len(all_candidates)
-            new_hits = after - before
-            # Track performance
-            s = kw_stats.setdefault(query, {"runs": 0, "hits": 0})
-            s["runs"] += 1
-            s["hits"] += new_hits
-            print(f"  [{i}/{len(ordered_queries)}] '{query}' -> {new_hits} new (total: {len(all_candidates)})")
-            time.sleep(0.3)
-            # Stop searching once we have enough candidates
-            if len(all_candidates) >= TARGET_LEADS * 3:
-                print(f"  Enough candidates ({len(all_candidates)}) — skipping remaining keywords")
-                break
-        save_keyword_stats(kw_stats)
-        print(f"  Keyword candidates: {len(all_candidates)}")
 
-        # ── Playlist-based discovery — finds artists not reachable by name search ──
+        # SRC 1: Genre-tag Artist Search — uses Spotify's genre: filter in /v1/search
+        # Finds artists by their Spotify genre tag, not by name. tag:hipster = underground/less-mainstream.
+        # NOTE: related-artists, browse/categories, browse/new-releases all return 403 with standard
+        # Client Credentials since Spotify's 2024 API restriction — only /v1/search endpoints work.
         if len(all_candidates) < TARGET_LEADS * 5:
-            print(f"\n  Playlist search ({len(PLAYLIST_SEARCHES)} queries)...")
+            print(f"\n  [SRC 1] Genre-tag Searches ({len(GENRE_TAG_SEARCHES)} genres)...")
+            before = len(all_candidates)
+            for genre_q in GENRE_TAG_SEARCHES:
+                add(spotify_keyword_search(genre_q, pages=5))
+                if len(all_candidates) >= TARGET_LEADS * 5:
+                    break
+                time.sleep(0.3)
+            print(f"  [SRC 1] Genre Tags: +{len(all_candidates) - before} new (total: {len(all_candidates)})")
+
+        # SRC 2: Keyword Search — artist name-based, now secondary to genre-tag search
+        if len(all_candidates) < TARGET_LEADS * 5:
+            print(f"\n  [SRC 2] Keyword Search ({len(SPOTIFY_KEYWORD_SEARCHES)} queries)...")
+            kw_stats = load_keyword_stats()
+            ordered_queries = weighted_shuffle(SPOTIFY_KEYWORD_SEARCHES, kw_stats)
+            for i, query in enumerate(ordered_queries, 1):
+                before = len(all_candidates)
+                found = spotify_keyword_search(query)
+                add(found)
+                new_hits = len(all_candidates) - before
+                s = kw_stats.setdefault(query, {"runs": 0, "hits": 0})
+                s["runs"] += 1
+                s["hits"] += new_hits
+                print(f"    [{i}/{len(ordered_queries)}] '{query}' -> {new_hits} new (total: {len(all_candidates)})")
+                time.sleep(0.3)
+                if len(all_candidates) >= TARGET_LEADS * 5:
+                    print(f"  Enough candidates ({len(all_candidates)}) — skipping remaining keywords")
+                    break
+            save_keyword_stats(kw_stats)
+            print(f"  Keyword candidates total: {len(all_candidates)}")
+
+        # SRC 3: Playlist Search — highest-quality source; curators build niche playlists
+        # that collect unsigned artists outside name/genre search results
+        if len(all_candidates) < TARGET_LEADS * 5:
+            print(f"\n  [SRC 3] Playlist Search ({len(PLAYLIST_SEARCHES)} queries)...")
             before_pl = len(all_candidates)
             for plq in PLAYLIST_SEARCHES:
                 add(spotify_playlist_search(plq))
