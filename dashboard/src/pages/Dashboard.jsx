@@ -63,6 +63,10 @@ export default function Dashboard({ API, onSelect }) {
   const [instaDiscoveryRunning, setInstaDiscoveryRunning] = useState(false)
   const [instaDiscoveryLog, setInstaDiscoveryLog] = useState([])
   const [instaDiscoveryProgress, setInstaDiscoveryProgress] = useState(0)
+  const [contentDiscoveryOpen, setContentDiscoveryOpen] = useState(false)
+  const [contentDiscoveryRunning, setContentDiscoveryRunning] = useState(false)
+  const [contentDiscoveryLog, setContentDiscoveryLog] = useState([])
+  const [contentDiscoveryProgress, setContentDiscoveryProgress] = useState(0)
   const [verifyStatus, setVerifyStatus] = useState(null)
 
   const searchTimer = useRef(null)
@@ -316,6 +320,35 @@ export default function Dashboard({ API, onSelect }) {
 
   const runInstaDiscovery = () => streamInstaDiscovery(true)
 
+  const streamContentDiscovery = async (fresh) => {
+    setContentDiscoveryRunning(true)
+    if (fresh) { setContentDiscoveryLog([]); setContentDiscoveryProgress(0) }
+    try {
+      const r = await fetch(`${API}/api/content-discover`, { method: 'POST' })
+      const reader = r.body.getReader()
+      const dec = new TextDecoder()
+      let buf = ""
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += dec.decode(value, { stream: true })
+        const lines = buf.split("\n")
+        buf = lines.pop()
+        for (const line of lines) {
+          if (!line.trim()) continue
+          try {
+            const msg = JSON.parse(line)
+            if (msg.log)                   setContentDiscoveryLog(l => [...l, msg.log])
+            if (msg.progress !== undefined) setContentDiscoveryProgress(msg.progress)
+            if (msg.done)                  { fetchArtists(); loadSessions() }
+          } catch { setContentDiscoveryLog(l => [...l, line]) }
+        }
+      }
+    } catch (e) { setContentDiscoveryLog(l => [...l, `Error: ${e.message}`]) }
+    setContentDiscoveryRunning(false)
+  }
+  const runContentDiscovery = () => streamContentDiscovery(true)
+
   // On mount — check if discovery is already running (page was closed mid-run)
   useEffect(() => {
     fetch(`${API}/api/discovery/status`)
@@ -340,6 +373,20 @@ export default function Dashboard({ API, onSelect }) {
           setInstaDiscoveryLog([`● Reconnected — Instagram discovery running (${d.logLines} lines logged)`])
           setInstaDiscoveryProgress(d.progress || 0)
           streamInstaDiscovery(false)
+        }
+      })
+      .catch(() => {})
+  }, [API])
+
+  useEffect(() => {
+    fetch(`${API}/api/content-discover/status`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.running) {
+          setContentDiscoveryOpen(true)
+          setContentDiscoveryLog([`● Reconnected — Creator discovery running (${d.logLines} lines logged)`])
+          setContentDiscoveryProgress(d.progress || 0)
+          streamContentDiscovery(false)
         }
       })
       .catch(() => {})
@@ -701,12 +748,14 @@ export default function Dashboard({ API, onSelect }) {
   const inProgressArtists = sortedArtists.filter(a => a.contact_quality === 'verifying' && a.instagram)
   const flaggedArtists    = sortedArtists.filter(a => a.contact_quality === 'skip')
   const instagramArtists  = sortedArtists.filter(a => a.platform === 'instagram' && a.contact_quality !== 'skip')
+  const creatorLeads      = sortedArtists.filter(a => a.platform === 'creator' && a.contact_quality !== 'skip')
   const displayedArtists  =
     activeTab === "verified"     ? verifiedArtists :
     activeTab === "unverified"   ? unverifiedArtists :
     activeTab === "inprogress"   ? inProgressArtists :
     activeTab === "flagged"      ? flaggedArtists :
     activeTab === "direct_insta" ? instagramArtists :
+    activeTab === "creators"     ? creatorLeads :
     allLeads
 
   return (
@@ -873,6 +922,57 @@ export default function Dashboard({ API, onSelect }) {
                 style={{ background: instaDiscoveryRunning ? "#1a1a2a" : "linear-gradient(135deg,#880066,#cc44aa)", border: "none", borderRadius: 8, padding: "9px 26px", color: instaDiscoveryRunning ? "#444" : "#fff", fontSize: 13, fontWeight: 700, cursor: instaDiscoveryRunning ? "default" : "pointer", letterSpacing: "0.02em" }}
               >
                 {instaDiscoveryRunning ? "Running..." : "Start Discovery"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Creator Discovery Modal ── */}
+      {contentDiscoveryOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ background: "rgba(13,13,13,0.88)", border: "1px solid #00ccaa44", borderRadius: 16, padding: "2rem", width: "min(620px, 92vw)", display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ color: "#fff", fontWeight: 700, fontSize: 17, letterSpacing: "-0.02em" }}>Creator Discovery</div>
+                <div style={{ color: "#555", fontSize: 12, marginTop: 3 }}>Finds podcast & reel creators who need editors · 1K–50K followers · Instagram + Twitter</div>
+              </div>
+              {!contentDiscoveryRunning && <button onClick={() => { setContentDiscoveryOpen(false); setContentDiscoveryLog([]); setContentDiscoveryProgress(0) }} style={{ background: "transparent", border: "none", color: "#555", fontSize: 22, cursor: "pointer" }}>×</button>}
+            </div>
+
+            <div style={{ background: "rgba(17,17,17,0.82)", borderRadius: 99, height: 6, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${contentDiscoveryProgress}%`, background: "linear-gradient(90deg,#006655,#00eebb)", borderRadius: 99, transition: "width 0.4s ease" }} />
+            </div>
+            <div style={{ color: "#444", fontSize: 11, textAlign: "right", marginTop: -10 }}>{contentDiscoveryProgress}%</div>
+
+            <div
+              ref={el => { if (el) el.scrollTop = el.scrollHeight }}
+              style={{ background: "#050505", border: "0.5px solid #1a1a1a", borderRadius: 8, padding: "12px", height: 260, overflowY: "auto", fontFamily: "monospace", fontSize: 11, color: "#555", display: "flex", flexDirection: "column", gap: 2 }}
+            >
+              {contentDiscoveryLog.length === 0 && !contentDiscoveryRunning && (
+                <span style={{ color: "#333" }}>Click Start to search Instagram and Twitter for podcast/reel creators.</span>
+              )}
+              {contentDiscoveryLog.map((line, i) => (
+                <div key={i} style={{ color: line.includes("ERROR") || line.includes("error") ? "#f44336" : line.includes("PASS") || line.includes("complete") || line.includes("Synced") ? "#4caf50" : line.includes("skip") || line.includes("Skip") || line.includes("blocked") ? "#555" : "#888" }}>{line}</div>
+              ))}
+              {contentDiscoveryRunning && <div style={{ color: "#00ccaa", animation: "pulse 1s infinite" }}>● running...</div>}
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              {!contentDiscoveryRunning && (
+                <button onClick={() => { setContentDiscoveryOpen(false); setContentDiscoveryLog([]); setContentDiscoveryProgress(0) }} style={{ background: "#1a1a1a", border: "0.5px solid #333", borderRadius: 8, padding: "9px 20px", color: "#888", fontSize: 13, cursor: "pointer" }}>Close</button>
+              )}
+              {contentDiscoveryRunning && (
+                <button onClick={() => setContentDiscoveryOpen(false)} style={{ background: "#001a1a", border: "0.5px solid #003333", borderRadius: 8, padding: "9px 20px", color: "#00aa88", fontSize: 13, cursor: "pointer" }} title="Discovery keeps running — reopen anytime">
+                  Run in Background
+                </button>
+              )}
+              <button
+                onClick={runContentDiscovery}
+                disabled={contentDiscoveryRunning}
+                style={{ background: contentDiscoveryRunning ? "#1a1a2a" : "linear-gradient(135deg,#006655,#00ccaa)", border: "none", borderRadius: 8, padding: "9px 26px", color: contentDiscoveryRunning ? "#444" : "#fff", fontSize: 13, fontWeight: 700, cursor: contentDiscoveryRunning ? "default" : "pointer", letterSpacing: "0.02em" }}
+              >
+                {contentDiscoveryRunning ? "Running..." : "Start Discovery"}
               </button>
             </div>
           </div>
@@ -1165,6 +1265,10 @@ export default function Dashboard({ API, onSelect }) {
                 {instaDiscoveryRunning && <span style={{ position: "absolute", top: 5, right: 5, width: 6, height: 6, borderRadius: "50%", background: "#4caf50", animation: "pulse 1.5s infinite" }} />}
                 + Insta Discovery
               </button>
+              <button onClick={() => setContentDiscoveryOpen(true)} style={btnStyle("linear-gradient(135deg,#001a1a,#003333)", `1px solid ${contentDiscoveryRunning ? "#00ccaaaa" : "#00ccaa44"}`, "#00eebb", { fontWeight: 700, letterSpacing: "0.02em", position: "relative" })}>
+                {contentDiscoveryRunning && <span style={{ position: "absolute", top: 5, right: 5, width: 6, height: 6, borderRadius: "50%", background: "#4caf50", animation: "pulse 1.5s infinite" }} />}
+                + Creator Discovery
+              </button>
               <button onClick={() => setSpotifyDumpOpen(true)} style={btnStyle("#0a1a0f", "0.5px solid #1DB95433", "#1DB954")}>
                 Spotify
               </button>
@@ -1282,6 +1386,7 @@ export default function Dashboard({ API, onSelect }) {
           ["verified",     "Verified Contacts",  verifiedArtists.length],
           ["unverified",   "Unverified",         unverifiedArtists.length],
           ["direct_insta", "Direct Insta",       instagramArtists.length],
+          ["creators",     "Creators",           creatorLeads.length],
           ["flagged",      "Flagged",            flaggedArtists.length],
           ["inprogress",   "In Progress",        inProgressArtists.length],
         ].map(([tab, label, count]) => (

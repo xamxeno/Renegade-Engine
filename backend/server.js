@@ -1759,6 +1759,75 @@ app.get('/api/insta-discover/status', (req, res) => {
   res.json({ running: _igDiscovery.running, progress: _igDiscovery.progress, logLines: _igDiscovery.log.length })
 })
 
+let _contentDiscovery = { running: false, py: null, log: [], progress: 0, clients: [] }
+
+function contentDiscoveryBroadcast(obj) {
+  const line = JSON.stringify(obj) + "\n"
+  _contentDiscovery.clients = _contentDiscovery.clients.filter(r => !r.writableEnded)
+  _contentDiscovery.clients.forEach(r => { try { r.write(line) } catch {} })
+}
+
+app.post('/api/content-discover', (req, res) => {
+  res.setHeader('Content-Type', 'application/x-ndjson')
+  res.setHeader('Transfer-Encoding', 'chunked')
+  res.setHeader('Cache-Control', 'no-cache')
+
+  if (_contentDiscovery.running) {
+    _contentDiscovery.log.forEach(obj => { try { res.write(JSON.stringify(obj) + "\n") } catch {} })
+    _contentDiscovery.clients.push(res)
+    req.on('close', () => { _contentDiscovery.clients = _contentDiscovery.clients.filter(r => r !== res) })
+    return
+  }
+
+  _contentDiscovery = { running: true, py: null, log: [], progress: 0, clients: [res] }
+
+  const scriptPath = path.join(__dirname, '../discovery/content_discovery.py')
+  const py = spawn('python', [scriptPath, '--no-prompt'], { cwd: path.join(__dirname, '../discovery') })
+  _contentDiscovery.py = py
+
+  const emit = obj => { _contentDiscovery.log.push(obj); contentDiscoveryBroadcast(obj) }
+
+  let lineBuffer = ""
+  py.stdout.on('data', chunk => {
+    lineBuffer += chunk.toString()
+    const lines = lineBuffer.split('\n')
+    lineBuffer = lines.pop()
+    for (const line of lines) {
+      if (!line.trim()) continue
+      const logObj = { log: line }
+      if (line.includes('complete')) { logObj.progress = 100 }
+      emit(logObj)
+    }
+  })
+
+  py.stderr.on('data', chunk => {
+    for (const line of chunk.toString().split('\n')) {
+      if (line.trim()) emit({ log: `[err] ${line}` })
+    }
+  })
+
+  py.on('close', () => {
+    emit({ progress: 100, done: true, log: '=== Creator Discovery finished ===' })
+    _contentDiscovery.running = false
+    _contentDiscovery.py = null
+    _contentDiscovery.clients.forEach(r => { try { r.end() } catch {} })
+    _contentDiscovery.clients = []
+  })
+
+  py.on('error', err => {
+    emit({ log: `ERROR: ${err.message}`, done: true })
+    _contentDiscovery.running = false
+    _contentDiscovery.clients.forEach(r => { try { r.end() } catch {} })
+    _contentDiscovery.clients = []
+  })
+
+  req.on('close', () => { _contentDiscovery.clients = _contentDiscovery.clients.filter(r => r !== res) })
+})
+
+app.get('/api/content-discover/status', (req, res) => {
+  res.json({ running: _contentDiscovery.running, progress: _contentDiscovery.progress, logLines: _contentDiscovery.log.length })
+})
+
 // GET /api/verify-status
 app.get('/api/verify-status', (req, res) => {
   res.json({
