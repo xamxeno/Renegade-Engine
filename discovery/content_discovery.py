@@ -511,15 +511,18 @@ def run():
     candidates.sort(key=lambda a: a["followers"])
 
     # ── Step 3: Claude scoring ───────────────────────────────────────────────
+    scoring_ran = False
     if CLAUDE_API_KEY:
         est = (len(candidates) / 20) * 0.03
         print(f"\n  CLAUDE SCORING — {len(candidates)} creators (~${est:.2f})")
         no_prompt = "--no-prompt" in sys.argv
         ans = "yes" if no_prompt else input("  Run scoring? (yes/no): ").strip().lower()
         if ans in ["yes", "y"]:
+            scoring_ran = True
             for i in range(0, len(candidates), 20):
-                score_batch(candidates[i:i+20])
-                qualified_batch = [a for a in candidates[i:i+20] if (a.get("score") or 0) >= MIN_SCORE]
+                batch = candidates[i:i+20]
+                score_batch(batch)
+                qualified_batch = [a for a in batch if (a.get("score") or 0) >= MIN_SCORE]
                 if qualified_batch:
                     save_to_supabase(qualified_batch, session_id)
                 print(f"  Scored {min(i+20, len(candidates))}/{len(candidates)}")
@@ -543,7 +546,6 @@ def run():
         score = a.get("score") or "—"
         print(f"  [{str(score):>3}]  {a['platform']:<12} @{a['handle']:<24} {a['followers']:>8,}     {a['name']}")
 
-    scoring_ran = CLAUDE_API_KEY and "--no-prompt" in sys.argv or (CLAUDE_API_KEY and 'ans' in dir() and ans in ["yes", "y"])
     if not scoring_ran:
         save_to_supabase(new_leads, session_id)
 
