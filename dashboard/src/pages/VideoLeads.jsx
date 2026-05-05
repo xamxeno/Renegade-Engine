@@ -41,16 +41,16 @@ export default function VideoLeads({ API, onSelect }) {
       if (minScore > 0)  params.set("min_score", minScore)
       const r = await fetch(`${API}/api/artists?${params}`)
       const data = await r.json()
-      if (seq === fetchSeq.current) setArtists(Array.isArray(data) ? data : [])
+      if (seq === fetchSeq.current) setArtists(Array.isArray(data) ? data : (data?.artists || []))
     } catch { if (seq === fetchSeq.current) setArtists([]) }
     if (seq === fetchSeq.current) setLoading(false)
   }, [API, filterStatus, filterSession, minScore, search])
 
   const loadSessions = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/api/artists/sessions?platform=creator`)
+      const r = await fetch(`${API}/api/sessions?platform=creator`)
       const data = await r.json()
-      setSessions(Array.isArray(data) ? data : [])
+      setSessions(Array.isArray(data?.sessions) ? data.sessions : [])
     } catch {}
   }, [API])
 

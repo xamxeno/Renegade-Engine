@@ -441,11 +441,11 @@ app.get('/api/artists/:id', async (req, res) => {
 // GET /api/sessions — distinct discovery session IDs with lead counts, newest first
 app.get('/api/sessions', async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('artists')
-      .select('session_id, discovered_at')
+    let q = supabase.from('artists').select('session_id, discovered_at')
       .not('session_id', 'is', null)
       .order('discovered_at', { ascending: false })
+    if (req.query.platform) q = q.eq('platform', req.query.platform)
+    const { data, error } = await q
     if (error) throw error
     const seen = new Map()
     for (const row of data) {
