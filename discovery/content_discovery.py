@@ -1,8 +1,8 @@
 """
-Renegade Records — Content Creator Discovery Engine v2
-Finds podcast hosts and reel/content creators who need editors.
-Source: YouTube channel search -> About page (subs, desc, IG handle)
-Restrictions: 1K-200K YT subscribers · USA/Canada/UK/Australia/UAE · no agencies
+Renegade Records — Content Creator Discovery Engine v3
+Targets: aesthetic lifestyle/fitness/fashion/travel influencers on YouTube with IG presence
+Requirements: active, English-speaking, Western market, visual/aesthetic content, solo creators
+Source: YouTube channel search -> About page API
 Run: python content_discovery.py [--no-prompt]
 """
 import sys, subprocess
@@ -23,10 +23,10 @@ CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "")
 SUPABASE_URL   = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY   = os.getenv("SUPABASE_KEY", "")
 
-TARGET_LEADS   = 100
-MIN_SUBS       = 1_000      # YouTube subscribers minimum
-MAX_SUBS       = 200_000    # YouTube subscribers maximum (wider than IG — YouTube grows slower)
-MIN_SCORE      = 60
+TARGET_LEADS = 100
+MIN_SUBS     = 5_000       # Raised — sub-5K channels are usually inactive/tiny
+MAX_SUBS     = 500_000     # Wider range — big IG accounts have smaller YT
+MIN_SCORE    = 65          # Raised threshold — quality over quantity
 
 _YT_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
 
@@ -36,68 +36,106 @@ _BROWSER_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
+# Hard block — any match disqualifies the channel immediately
 BLOCKED_REGIONS = [
-    "india","indian","pakistan","pakistani","hindi","bollywood","desi","bangladesh","bengali","urdu",
-    "karachi","lahore","islamabad","mumbai","delhi","kolkata","bangalore",
-    "kenya","ethiopia","tanzania","nigeria","ghana","lagos","nairobi","johannesburg",
-    "indonesia","indonesian","philippines","filipino","malaysia","malay",
-    "japan","japanese","korea","korean","china","chinese","vietnam","vietnamese",
-    "mexico","mexican","colombia","colombian","brazil","brazilian",
+    # South Asia
+    "india","indian","pakistan","pakistani","hindi","bollywood","desi","bangladesh","bengali",
+    "urdu","karachi","lahore","islamabad","mumbai","delhi","kolkata","bangalore","hyderabad",
+    "punjabi","rajasthan","kerala","tamil","telugu","marathi","gujarati","nepali","sri lanka",
+    # Africa
+    "kenya","ethiopia","tanzania","nigeria","ghana","lagos","nairobi","johannesburg","africa","african",
+    "cameroon","uganda","rwanda","zimbabwe","zambia","south africa",
+    # Southeast Asia
+    "indonesia","indonesian","philippines","filipino","malaysia","malay","thai","thailand",
+    "myanmar","vietnam","vietnamese","singapore","cambodia",
+    # East Asia
+    "japan","japanese","korea","korean","china","chinese","taiwan","hong kong",
+    # Latin America
+    "mexico","mexican","colombia","colombian","brazil","brazilian","spanish","espanol","español",
+    "venezuela","argentina","peru","chile","dominican",
+    # Other
+    "arab","arabic","turkish","turkey","russia","russian","hindi",
 ]
 
-CONTENT_KEYWORDS = [
-    "podcast", "podcaster", "host", "episodes", "content creator",
-    "reels", "reel", "youtuber", "vlogger", "content", "creator",
-    "influencer", "lifestyle", "entrepreneur", "founder", "coach",
-    "business owner", "personal brand", "digital creator", "speaker",
-    "vlog", "daily", "interview",
+# Hard block on content type — these channels won't need video editors
+BLOCKED_CONTENT = [
+    # Family / kids
+    "family vlog","family channel","mom vlog","dad vlog","kids channel","children",
+    "parenting","our family","baby","pregnancy","homeschool","couple vlog","married life",
+    "husband and wife","wife and husband","family of","our kids","mum vlog",
+    # Religious / political
+    "islamic","muslim","christian","church","sermon","gospel","bible","quran","pastor",
+    "politics","political","republican","democrat","news channel","breaking news",
+    # Low-quality / irrelevant
+    "gaming","gamer","minecraft","fortnite","roblox","anime","cartoon","compilation",
+    "funny videos","prank","reaction video","reacting to","asmr","mukbang",
+    "cooking channel","recipe","food vlog","kitchen","baking","chef",
+    "tech review","unboxing","gadget","software tutorial","programming","coding",
+    "real estate","mortgage","insurance","finance only","stock market","crypto only",
+    "music producer","beats","rap music","hip hop music","music channel",
+    "car review","automotive","vehicle","mechanic",
 ]
 
-EXCLUSION_KEYWORDS = [
-    "media company", "production house", "agency", "talent agency",
-    "management", "pr firm", "marketing agency", "we create content for",
-    "our clients", "team of creators", "studio",
+# At least one of these should appear for the channel to be relevant
+RELEVANCE_SIGNALS = [
+    "lifestyle","aesthetic","fashion","style","outfit","ootd","beauty","skincare","makeup",
+    "fitness","gym","workout","wellness","health","mindset","motivation","self improvement",
+    "travel","adventure","vlog","creator","influencer","content","reels","instagram",
+    "entrepreneur","brand","business","personal brand","model","photographer",
+    "digital nomad","luxury","hustle","grind","coach","speaker",
 ]
 
 _BAD_IG_PATHS = {
-    'p', 'explore', 'stories', 'reels', 'accounts', 'login', 'signup',
-    'direct', 'tv', 'about', 'press', 'api', 'static', 'legal', 'help',
-    'location', 'hashtag', 'tags', 'web', 'ar', 'events', 'music',
-    'create', 'directory', 'challenge', 'share', 'reel',
+    'p','explore','stories','reels','accounts','login','signup','direct','tv',
+    'about','press','api','static','legal','help','location','hashtag','tags',
+    'web','ar','events','music','create','directory','challenge','share','reel',
 }
 
-# Search terms targeting small-to-mid creators (avoid massive media brands)
+# Targeted searches for aesthetic/active influencers in Western markets
 YT_SEARCHES = [
-    # Small/indie podcast hosts
-    "independent podcast USA lifestyle entrepreneur",
-    "solo podcast host small business USA",
-    "new podcast 2024 2025 independent creator",
-    "indie podcast host personal development",
-    "podcast host real estate entrepreneur USA",
-    "daily podcast solo creator lifestyle",
-    "podcast host finance entrepreneur independent",
-    "podcast side hustle entrepreneur USA",
-    # Content/reel creators
-    "independent content creator USA lifestyle vlog",
-    "personal brand entrepreneur content creator",
-    "small youtuber daily vlog USA lifestyle",
-    "content creator entrepreneur fitness lifestyle USA",
-    "independent travel vlog USA creator",
-    "business owner content creator reels USA",
-    "fitness coach content creator USA",
-    "life coach content creator USA",
-    # Canada UK Australia UAE
-    "podcast host Canada independent lifestyle",
-    "content creator UK lifestyle entrepreneur independent",
-    "podcast host Australia independent small",
-    "entrepreneur content creator Dubai UAE",
+    # Lifestyle / aesthetic
+    "aesthetic lifestyle vlog USA 2024 2025",
+    "lifestyle influencer USA youtube instagram",
+    "aesthetic daily vlog girl USA",
+    "luxury lifestyle vlog USA influencer",
+    "aesthetic vlog UK lifestyle creator",
+    # Fitness / wellness
+    "fitness influencer USA youtube channel",
+    "gym lifestyle vlog USA aesthetic",
+    "wellness lifestyle creator USA youtube",
+    "fitness content creator UK instagram youtube",
+    "health and fitness influencer USA aesthetic",
+    # Fashion / beauty
+    "fashion content creator USA youtube instagram",
+    "style influencer USA youtube aesthetic",
+    "fashion vlog USA creator 2024 2025",
+    "beauty influencer USA youtube channel",
+    "fashion lifestyle creator UK australia",
+    # Travel / adventure
+    "travel influencer USA youtube channel",
+    "solo travel vlog aesthetic USA",
+    "travel lifestyle creator UK aesthetic",
+    "digital nomad lifestyle vlog creator",
+    "adventure travel vlog USA influencer",
+    # Entrepreneur / personal brand
+    "entrepreneur lifestyle vlog USA youtube",
+    "personal brand creator USA youtube instagram",
+    "entrepreneur influencer USA aesthetic youtube",
+    "business lifestyle creator USA youtube",
+    # Canada / UK / Australia / UAE
+    "lifestyle influencer Canada youtube instagram",
+    "aesthetic vlog creator Australia instagram",
+    "content creator UAE Dubai lifestyle",
+    "lifestyle influencer UK aesthetic youtube",
+    # Model / creator crossover
+    "model content creator USA youtube instagram",
+    "instagram influencer youtube channel USA aesthetic",
 ]
 
 
 # ── YouTube discovery ─────────────────────────────────────────────────────────
 
 def _parse_number(s):
-    """Parse '12.5K', '1.2M', '3.84 thousand', '176 thousand', '185' -> int."""
     s = str(s).replace(",", "").strip().lower()
     try:
         if "million" in s:
@@ -114,7 +152,6 @@ def _parse_number(s):
 
 
 def yt_search_channels(keyword, max_results=20):
-    """Search YouTube for channels (sp=EgIQAg filters to channel results)."""
     try:
         url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(keyword)}&sp=EgIQAg%253D%253D"
         r = requests.get(url, headers=_BROWSER_HEADERS, timeout=15)
@@ -131,15 +168,11 @@ def yt_search_channels(keyword, max_results=20):
 
 
 def get_channel_about(channel_id):
-    """
-    Fetch YouTube channel About tab via internal browse API.
-    Returns dict: id, name, yt_handle, subs_count, desc, ig (list).
-    """
     try:
         payload = {
             "context": {"client": {"clientName": "WEB", "clientVersion": "2.20240101.00.00", "hl": "en", "gl": "US"}},
             "browseId": channel_id,
-            "params":   "EgVhYm91dA==",  # base64('about')
+            "params":   "EgVhYm91dA==",
         }
         r = requests.post(
             "https://www.youtube.com/youtubei/v1/browse",
@@ -157,10 +190,9 @@ def get_channel_about(channel_id):
             name = data["header"]["pageHeaderRenderer"]["pageTitle"]
         except (KeyError, TypeError):
             m = re.search(r'"pageTitle":"([^"]{2,80})"', data_str)
-            if m:
-                name = m.group(1)
+            if m: name = m.group(1)
 
-        # Subscriber count from accessibilityLabel
+        # Subscriber count
         subs_count = 0
         subs_str   = ""
         subs_m = re.search(r'"accessibilityLabel":\s*"([^"]*subscribers)"', data_str)
@@ -178,17 +210,14 @@ def get_channel_about(channel_id):
         desc   = desc_m.group(1) if desc_m else ""
 
         # IG handles from YouTube outbound redirect URLs
-        # Format: youtube.com/redirect?...&q=https%3A//instagram.com/handle
         ig_handles = []
         for block in re.findall(r"youtube\.com/redirect[^\"]{0,600}", data_str):
             q_idx = block.find("q=")
-            if q_idx == -1:
-                continue
+            if q_idx == -1: continue
             q_val = block[q_idx + 2:]
             for ch in ["&", "\"", "\\"]:
                 pos = q_val.find(ch)
-                if pos != -1:
-                    q_val = q_val[:pos]
+                if pos != -1: q_val = q_val[:pos]
             decoded = urllib.parse.unquote(q_val)
             if "instagram.com" in decoded:
                 ig_m = re.search(r"instagram\.com/([a-zA-Z0-9._]{2,30})", decoded)
@@ -212,19 +241,19 @@ def get_channel_about(channel_id):
 
 # ── Filters ───────────────────────────────────────────────────────────────────
 
-def is_content_creator(desc, name, handle):
-    text = (desc + " " + name + " " + (handle or "")).lower()
-    return any(kw in text for kw in CONTENT_KEYWORDS)
-
-
-def is_excluded(desc, name):
-    text = (desc + " " + name).lower()
-    return any(kw in text for kw in EXCLUSION_KEYWORDS)
-
-
 def is_blocked_region(desc, name):
     text = (desc + " " + name).lower()
     return any(r in text for r in BLOCKED_REGIONS)
+
+
+def is_blocked_content(desc, name):
+    text = (desc + " " + name).lower()
+    return any(kw in text for kw in BLOCKED_CONTENT)
+
+
+def has_relevance_signal(desc, name, yt_handle):
+    text = (desc + " " + name + " " + (yt_handle or "")).lower()
+    return any(kw in text for kw in RELEVANCE_SIGNALS)
 
 
 # ── Supabase ──────────────────────────────────────────────────────────────────
@@ -241,14 +270,48 @@ def get_existing_db_leads():
             timeout=15,
         )
         data = r.json()
-        if not isinstance(data, list):
-            return set(), set()
+        if not isinstance(data, list): return set(), set()
         handles = {a["instagram"].lower() for a in data if a.get("instagram")}
         handles |= {a["platform_id"].lower() for a in data if a.get("platform_id")}
         names   = {a["name"].lower().strip() for a in data if a.get("name")}
         return handles, names
     except:
         return set(), set()
+
+
+def delete_trash_creator_leads():
+    """Delete existing low-quality creator leads (score < 65 or no score) to clean the slate."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return 0
+    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+    try:
+        # Fetch IDs of creator leads with score < 65 or null score
+        r = requests.get(
+            f"{SUPABASE_URL}/rest/v1/artists",
+            headers=headers,
+            params={"select": "id,score,status", "platform": "eq.creator", "limit": 5000},
+            timeout=15,
+        )
+        records = r.json()
+        if not isinstance(records, list): return 0
+        # Only delete 'new' status leads (never delete contacted/pitched/signed)
+        trash_ids = [
+            rec["id"] for rec in records
+            if rec.get("status") in ("new", "ignored", None)
+            and (rec.get("score") is None or int(rec.get("score") or 0) < 65)
+        ]
+        if not trash_ids:
+            return 0
+        del_r = requests.delete(
+            f"{SUPABASE_URL}/rest/v1/artists",
+            headers=headers,
+            params={"id": f"in.({','.join(str(i) for i in trash_ids)})"},
+            timeout=15,
+        )
+        return len(trash_ids) if del_r.status_code in (200, 204) else 0
+    except Exception as e:
+        print(f"  [Cleanup] {e}")
+        return 0
 
 
 def save_to_supabase(artists, session_id):
@@ -306,23 +369,36 @@ def score_batch(artists):
 
     artist_list = "\n".join([
         f"{i+1}. {a['name']} ({a['subs_str']}) — @{a['yt_handle'] or a['channel_id']}"
-        f"\n   IG: @{a['ig_handle']}" if a.get('ig_handle') else ""
-        f"\n   Description: {a['desc'][:200]}"
+        + (f" | IG: @{a['ig_handle']}" if a.get('ig_handle') else "")
+        + (f"\n   Bio: {a['desc'][:200]}" if a.get('desc') else "")
         for i, a in enumerate(artists)
     ])
 
-    prompt = f"""You are a talent scout for a video editing agency seeking podcast hosts and reel/content creators who likely need a professional editor.
+    prompt = f"""You are a scout for a premium video editing agency. You're looking for active aesthetic lifestyle/fitness/fashion/travel influencers on YouTube who are solo creators and likely need a professional video editor.
 
-Score HIGH (70+) if: active podcast host or reel/content creator, independent or solo (not an agency), under 200K subscribers, entrepreneur/founder/coach niche (has budget for services), posts regularly.
+Score HIGH (75+) if:
+- Aesthetic visual content: lifestyle, fitness, fashion, travel, beauty, wellness, luxury
+- Solo/independent creator (not a media company or brand channel)
+- Active and posting regularly in 2024–2025
+- Has an Instagram presence (strong signal they're a real influencer)
+- Western market: USA, Canada, UK, Australia, UAE
+- Would clearly benefit from better video editing
 
-Score LOW (under 40) if: large media company, talent agency, gaming channel with no creator face, pure news/politics, meme page, or clearly has a full production team.
+Score LOW (under 40) if:
+- Family vlogger / couple vlog / kids content / parenting channel
+- South Asian, Pakistani, Indian, Bangladeshi, or any non-Western content
+- Gaming, cooking, tech reviews, news, politics, religion
+- Inactive or seems to have stopped posting
+- Clearly a media company or team (not solo)
+- Pure talking-head podcast with no visual production value
+- Their content doesn't require video editing skill (slideshows, static, text)
 
-Score MEDIUM (40-69) if: possibly a content creator but niche is unclear or channel is very new.
+Score MEDIUM (40–74) if niche is lifestyle-adjacent but unclear or mixed signals.
 
 Creators:
 {artist_list}
 
-Return ONLY a JSON array:
+Return ONLY a JSON array — no extra text:
 [{{"name": "...", "score": 75, "reason": "one sentence"}}]"""
 
     try:
@@ -349,13 +425,21 @@ Return ONLY a JSON array:
 def run():
     session_id = datetime.now().strftime("creator_%Y%m%d_%H%M")
     print("\n" + "=" * 60)
-    print("  RENEGADE RECORDS — Content Creator Discovery Engine v2")
+    print("  RENEGADE RECORDS — Content Creator Discovery Engine v3")
     print("  Source: YouTube search -> channel About page")
-    print("  Targets: Podcast hosts + Reel/Content creators")
-    print("  Regions: USA, Canada, UK, Australia, UAE")
-    print(f"  Target: {TARGET_LEADS} new leads | Subs: {MIN_SUBS:,}-{MAX_SUBS:,}")
+    print("  Targets: Aesthetic lifestyle/fitness/fashion/travel influencers")
+    print("  Regions: USA, Canada, UK, Australia, UAE only")
+    print(f"  Target: {TARGET_LEADS} leads | Subs: {MIN_SUBS:,}-{MAX_SUBS:,} | Score >= {MIN_SCORE}")
     print(f"  Session: {session_id}")
     print("=" * 60)
+
+    # ── Clean up existing trash creator leads ─────────────────────────────────
+    print("\n  Cleaning up low-quality existing creator leads...")
+    deleted = delete_trash_creator_leads()
+    if deleted:
+        print(f"  Removed {deleted} low-quality creator leads from DB")
+    else:
+        print("  No trash leads to remove")
 
     print("\n  Checking existing leads in Supabase...")
     existing_handles, existing_names = get_existing_db_leads()
@@ -372,16 +456,16 @@ def run():
         for cid in new:
             seen_channel_ids.add(cid)
             all_channel_ids.append(cid)
-        print(f"  [{i}/{len(YT_SEARCHES)}] '{query[:50]}' -> {len(new)} new channels")
+        print(f"  [{i}/{len(YT_SEARCHES)}] '{query[:55]}' -> {len(new)} new channels")
         time.sleep(random.uniform(1.5, 3.0))
 
     print(f"\n  Total unique YouTube channels: {len(all_channel_ids)}")
 
-    # ── Step 2: Fetch About pages, filter, queue candidates ──────────────────
+    # ── Step 2: Fetch About pages, filter ────────────────────────────────────
     print(f"\n  Fetching channel About pages...")
     candidates = []
     seen_ids   = set(existing_handles)
-    skip_subs = skip_excluded = skip_region = skip_dupe = 0
+    skip_subs = skip_content = skip_region = skip_dupe = skip_relevance = 0
 
     for i, cid in enumerate(all_channel_ids, 1):
         if cid in seen_ids:
@@ -396,21 +480,25 @@ def run():
         desc       = info["desc"]
         ig         = info["ig"][0] if info["ig"] else ""
 
-        # Sub count filter
         if subs_count < MIN_SUBS or subs_count > MAX_SUBS:
             skip_subs += 1
             if i % 20 == 0:
-                print(f"  [{i}/{len(all_channel_ids)}] checked {i} channels — {len(candidates)} candidates so far")
-            time.sleep(0.3)
-            continue
-
-        if is_excluded(desc, name):
-            skip_excluded += 1
+                print(f"  [{i}/{len(all_channel_ids)}] checked {i} — {len(candidates)} candidates")
             time.sleep(0.3)
             continue
 
         if is_blocked_region(desc, name):
             skip_region += 1
+            time.sleep(0.3)
+            continue
+
+        if is_blocked_content(desc, name):
+            skip_content += 1
+            time.sleep(0.3)
+            continue
+
+        if not has_relevance_signal(desc, name, info.get("yt_handle")):
+            skip_relevance += 1
             time.sleep(0.3)
             continue
 
@@ -443,8 +531,9 @@ def run():
     print(f"\n  Filter results:")
     print(f"    Channels checked     : {i}")
     print(f"    Subs out of range    : {skip_subs}")
-    print(f"    Excluded (agency)    : {skip_excluded}")
     print(f"    Blocked region       : {skip_region}")
+    print(f"    Blocked content type : {skip_content}")
+    print(f"    No relevance signal  : {skip_relevance}")
     print(f"    Duplicates           : {skip_dupe}")
     print(f"    PASS                 : {len(candidates)}")
 
@@ -482,22 +571,17 @@ def run():
     if not scoring_ran:
         qualified = candidates
         save_to_supabase(qualified[:TARGET_LEADS], session_id)
-    elif not qualified:
-        # Scoring ran but nothing hit the threshold — save top candidates by score anyway
-        print(f"\n  No leads hit score >= {MIN_SCORE} — saving top {min(20, len(candidates))} by score anyway")
-        top = sorted(candidates, key=lambda x: x.get("score", 0), reverse=True)[:20]
-        save_to_supabase(top, session_id)
-        qualified = top
 
     new_leads = qualified[:TARGET_LEADS]
 
     print(f"\n  Qualified (score >= {MIN_SCORE}): {len(qualified)}")
-    print(f"\n  {'Score':<6} {'Subscribers':<14} {'Name':<35} {'IG'}")
-    print("  " + "-" * 70)
-    for a in new_leads[:25]:
-        score  = str(a.get("score") or "-")
-        ig_str = f"@{a['ig_handle']}" if a.get("ig_handle") else "-"
-        print(f"  [{score:>3}]  {a['subs_str']:<14} {a['name']:<35} {ig_str}")
+    if new_leads:
+        print(f"\n  {'Score':<6} {'Subscribers':<14} {'Name':<35} {'IG'}")
+        print("  " + "-" * 70)
+        for a in new_leads[:30]:
+            score  = str(a.get("score") or "-")
+            ig_str = f"@{a['ig_handle']}" if a.get("ig_handle") else "-"
+            print(f"  [{score:>3}]  {a['subs_str']:<14} {a['name']:<35} {ig_str}")
 
     print(f"\n  {len(new_leads)} creator leads added to dashboard.")
     print("\n" + "=" * 60)
