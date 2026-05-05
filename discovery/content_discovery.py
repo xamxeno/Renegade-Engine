@@ -482,6 +482,12 @@ def run():
     if not scoring_ran:
         qualified = candidates
         save_to_supabase(qualified[:TARGET_LEADS], session_id)
+    elif not qualified:
+        # Scoring ran but nothing hit the threshold — save top candidates by score anyway
+        print(f"\n  No leads hit score >= {MIN_SCORE} — saving top {min(20, len(candidates))} by score anyway")
+        top = sorted(candidates, key=lambda x: x.get("score", 0), reverse=True)[:20]
+        save_to_supabase(top, session_id)
+        qualified = top
 
     new_leads = qualified[:TARGET_LEADS]
 
