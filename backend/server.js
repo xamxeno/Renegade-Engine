@@ -832,12 +832,14 @@ app.get('/api/flush/preview', async (req, res) => {
 // DELETE /api/flush — delete all junk new leads
 app.delete('/api/flush', async (req, res) => {
   try {
-    // Step 1: get IDs to delete (score < 50 OR null OR producer/contactless, only if status=new)
+    // Step 1: get IDs to delete — status=new, score<60 or null, skip/contactless
+    // score>=60 leads are always protected (Claude-validated)
     const { data: targets, error: fetchErr } = await supabase
       .from('artists')
-      .select('id')
+      .select('id, score')
       .eq('status', 'new')
-      .or('score.is.null,score.lt.50,contact_quality.eq.skip,contact_quality.eq.contactless')
+      .or('contact_quality.eq.skip,contact_quality.eq.contactless,score.lt.60,score.is.null')
+      .not('score', 'gte', 60)
     if (fetchErr) throw fetchErr
     if (!targets.length) return res.json({ deleted: 0, message: 'Nothing to flush' })
 
