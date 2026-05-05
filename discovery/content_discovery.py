@@ -11,7 +11,7 @@ for _pkg in ['requests', 'python-dotenv']:
     except ImportError: subprocess.check_call([sys.executable, '-m', 'pip', 'install', _pkg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 import os, json, time, re, requests, io, random, urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
@@ -23,10 +23,11 @@ CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "")
 SUPABASE_URL   = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY   = os.getenv("SUPABASE_KEY", "")
 
-TARGET_LEADS = 100
-MIN_SUBS     = 5_000       # Raised — sub-5K channels are usually inactive/tiny
-MAX_SUBS     = 500_000     # Wider range — big IG accounts have smaller YT
-MIN_SCORE    = 65          # Raised threshold — quality over quantity
+TARGET_LEADS        = 100
+MIN_SUBS            = 5_000
+MAX_SUBS            = 500_000
+MIN_SCORE           = 65
+MAX_INACTIVE_MONTHS = 6    # Skip channels with no upload in the last 6 months
 
 _YT_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
 
@@ -237,6 +238,26 @@ def get_channel_about(channel_id):
         }
     except Exception:
         return {"id": channel_id, "name": "", "yt_handle": None, "subs_count": 0, "subs_str": "", "desc": "", "ig": []}
+
+
+def is_recently_active(channel_id, months=MAX_INACTIVE_MONTHS):
+    """Return True if the channel uploaded at least once in the last `months` months."""
+    try:
+        url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
+        r = requests.get(url, headers=_BROWSER_HEADERS, timeout=10)
+        if r.status_code != 200:
+            return True  # Can't verify — give benefit of the doubt
+        # Grab the first <published> date in the feed (most recent video)
+        m = re.search(r"<published>([^<]+)</published>", r.text)
+        if not m:
+            return True  # No videos listed — new channel or private; keep for Claude to decide
+        pub_str = m.group(1).strip()
+        # Format: 2024-03-15T18:22:31+00:00
+        pub_dt = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
+        cutoff = datetime.now(timezone.utc) - timedelta(days=months * 30)
+        return pub_dt >= cutoff
+    except Exception:
+        return True  # Network error — don't discard on uncertainty
 
 
 # ── Filters ───────────────────────────────────────────────────────────────────
@@ -465,7 +486,7 @@ def run():
     print(f"\n  Fetching channel About pages...")
     candidates = []
     seen_ids   = set(existing_handles)
-    skip_subs = skip_content = skip_region = skip_dupe = skip_relevance = 0
+    skip_subs = skip_content = skip_region = skip_dupe = skip_relevance = skip_inactive = 0
 
     for i, cid in enumerate(all_channel_ids, 1):
         if cid in seen_ids:
@@ -502,6 +523,11 @@ def run():
             time.sleep(0.3)
             continue
 
+        if not is_recently_active(cid):
+            skip_inactive += 1
+            time.sleep(0.3)
+            continue
+
         if name.lower().strip() in existing_names:
             skip_dupe += 1
             time.sleep(0.3)
@@ -534,6 +560,7 @@ def run():
     print(f"    Blocked region       : {skip_region}")
     print(f"    Blocked content type : {skip_content}")
     print(f"    No relevance signal  : {skip_relevance}")
+    print(f"    Inactive (>6 months) : {skip_inactive}")
     print(f"    Duplicates           : {skip_dupe}")
     print(f"    PASS                 : {len(candidates)}")
 
