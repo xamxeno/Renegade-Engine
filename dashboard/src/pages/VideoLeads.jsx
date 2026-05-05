@@ -109,9 +109,51 @@ export default function VideoLeads({ API, onSelect }) {
     return sortDir === "desc" ? v(b) - v(a) : v(a) - v(b)
   })
 
+  const selectAll = () => {
+    if (selectedIds.size === sorted.length) { clearSelection(); return }
+    setSelectedIds(new Set(sorted.map(a => a.id)))
+  }
+
+  const [bulkBusy, setBulkBusy] = useState(false)
+
   const toggleSelect = (id, e) => {
     e.stopPropagation()
+    e.preventDefault()
     setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+
+  const clearSelection = () => setSelectedIds(new Set())
+
+  const bulkStatus = async (status) => {
+    const ids = [...selectedIds]
+    if (!ids.length) return
+    setBulkBusy(true)
+    try {
+      await fetch(`${API}/api/artists/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, action: 'status', status }),
+      })
+      clearSelection()
+      fetchArtists()
+    } catch {}
+    setBulkBusy(false)
+  }
+
+  const bulkFlag = async () => {
+    const ids = [...selectedIds]
+    if (!ids.length) return
+    setBulkBusy(true)
+    try {
+      await fetch(`${API}/api/artists/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, action: 'delete' }),
+      })
+      clearSelection()
+      fetchArtists()
+    } catch {}
+    setBulkBusy(false)
   }
 
   const windowWidth = window.innerWidth
@@ -211,6 +253,9 @@ export default function VideoLeads({ API, onSelect }) {
 
       {/* ── Filter bar ── */}
       <div style={{ display: "flex", gap: 10, marginBottom: "1.25rem", flexWrap: "wrap", alignItems: "center" }}>
+        <div onClick={selectAll} title="Select all" style={{ width: 18, height: 18, borderRadius: 4, border: `1.5px solid ${selectedIds.size === sorted.length && sorted.length > 0 ? "#00ccaa" : "#333"}`, background: selectedIds.size === sorted.length && sorted.length > 0 ? "#00ccaa22" : "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          {selectedIds.size === sorted.length && sorted.length > 0 && <span style={{ color: "#00ccaa", fontSize: 11 }}>✓</span>}
+        </div>
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -251,6 +296,19 @@ export default function VideoLeads({ API, onSelect }) {
         </select>
       </div>
 
+      {/* ── Bulk actions bar ── */}
+      {selectedIds.size > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: "1rem", background: "rgba(0,204,170,0.06)", border: "0.5px solid #00ccaa33", borderRadius: 10, padding: "10px 14px", flexWrap: "wrap" }}>
+          <span style={{ color: "#00ccaa", fontSize: 13, fontWeight: 600, marginRight: 4 }}>{selectedIds.size} selected</span>
+          <button onClick={() => bulkStatus("contacted")} disabled={bulkBusy} style={{ background: "#1a1a0d", border: "0.5px solid #cddc3944", borderRadius: 7, padding: "6px 14px", color: "#cddc39", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Contacted</button>
+          <button onClick={() => bulkStatus("pitched")}   disabled={bulkBusy} style={{ background: "#1a0d00", border: "0.5px solid #ff980044", borderRadius: 7, padding: "6px 14px", color: "#ff9800", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Pitched</button>
+          <button onClick={() => bulkStatus("signed")}    disabled={bulkBusy} style={{ background: "#1a0d1a", border: "0.5px solid #e040fb44", borderRadius: 7, padding: "6px 14px", color: "#e040fb", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Signed</button>
+          <button onClick={() => bulkStatus("ignored")}   disabled={bulkBusy} style={{ background: "#1a0d0d", border: "0.5px solid #f4433644", borderRadius: 7, padding: "6px 14px", color: "#f44336", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>Ignore</button>
+          <button onClick={bulkFlag} disabled={bulkBusy} style={{ background: "#1a0808", border: "0.5px solid #cc333344", borderRadius: 7, padding: "6px 14px", color: "#cc3333", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>🚩 Flag</button>
+          <button onClick={clearSelection} style={{ background: "transparent", border: "none", color: "#555", fontSize: 12, cursor: "pointer", marginLeft: "auto" }}>Clear</button>
+        </div>
+      )}
+
       {/* ── Lead grid ── */}
       {loading && artists.length === 0 ? (
         <div style={{ textAlign: "center", color: "#444", padding: "3rem", fontSize: 14 }}>Loading creator leads...</div>
@@ -286,11 +344,10 @@ function CreatorCard({ artist, onClick, selected, onSelect }) {
   const profileUrl  = artist.profile_url || (artist.instagram ? `https://www.instagram.com/${artist.instagram}/` : null)
 
   return (
-    <a
-      href={`?artist=${artist.id}`}
-      onClick={e => { e.preventDefault(); onClick() }}
+    <div
+      onClick={onClick}
       style={{
-        display: "block", textDecoration: "none",
+        display: "block",
         background: selected ? "rgba(0,204,170,0.06)" : "rgba(13,13,13,0.82)",
         border: `0.5px solid ${selected ? "#00ccaa55" : isFlagged ? "#3a1515" : "#1f1f1f"}`,
         borderRadius: 12, padding: "14px 16px",
@@ -337,6 +394,6 @@ function CreatorCard({ artist, onClick, selected, onSelect }) {
           </a>
         )}
       </div>
-    </a>
+    </div>
   )
 }
