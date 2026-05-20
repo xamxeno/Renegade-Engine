@@ -370,7 +370,7 @@ def save_to_supabase(artists, session_id):
         }
         try:
             r = requests.post(
-                f"{SUPABASE_URL}/rest/v1/artists?on_conflict=platform_id",
+                f"{SUPABASE_URL}/rest/v1/artists?on_conflict=platform,platform_id",
                 headers={**headers, "Prefer": "resolution=merge-duplicates,return=minimal"},
                 json=payload, timeout=10
             )
