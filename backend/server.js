@@ -865,6 +865,75 @@ app.delete('/api/flush', async (req, res) => {
   }
 })
 
+// GET /api/flush/creators/preview — count all creator leads
+app.get('/api/flush/creators/preview', async (req, res) => {
+  try {
+    const { count, error } = await supabase
+      .from('artists').select('*', { count: 'exact', head: true })
+      .eq('platform', 'creator')
+    if (error) throw error
+    res.json({ count: count ?? 0 })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// DELETE /api/flush/creators — permanently delete ALL creator leads
+app.delete('/api/flush/creators', async (req, res) => {
+  try {
+    const { data: rows, error: fetchErr } = await supabase
+      .from('artists').select('id').eq('platform', 'creator')
+    if (fetchErr) throw fetchErr
+    if (!rows?.length) return res.json({ deleted: 0, message: 'No creator leads to flush' })
+    let deleted = 0
+    for (let i = 0; i < rows.length; i += 100) {
+      const chunk = rows.slice(i, i + 100).map(r => r.id)
+      const { error: delErr } = await supabase.from('artists').delete().in('id', chunk)
+      if (delErr) throw delErr
+      deleted += chunk.length
+    }
+    res.json({ deleted, message: `Flushed ${deleted} creator leads` })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/flush/reset-music/preview — count music leads that would be deleted (keeps pitched+signed)
+app.get('/api/flush/reset-music/preview', async (req, res) => {
+  try {
+    const { count, error } = await supabase
+      .from('artists').select('*', { count: 'exact', head: true })
+      .or('platform.neq.creator,platform.is.null')
+      .not('status', 'in', '("pitched","signed")')
+    if (error) throw error
+    res.json({ count: count ?? 0 })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// DELETE /api/flush/reset-music — delete all music leads except pitched+signed
+app.delete('/api/flush/reset-music', async (req, res) => {
+  try {
+    const { data: rows, error: fetchErr } = await supabase
+      .from('artists').select('id')
+      .or('platform.neq.creator,platform.is.null')
+      .not('status', 'in', '("pitched","signed")')
+    if (fetchErr) throw fetchErr
+    if (!rows?.length) return res.json({ deleted: 0, message: 'Nothing to reset' })
+    let deleted = 0
+    for (let i = 0; i < rows.length; i += 100) {
+      const chunk = rows.slice(i, i + 100).map(r => r.id)
+      const { error: delErr } = await supabase.from('artists').delete().in('id', chunk)
+      if (delErr) throw delErr
+      deleted += chunk.length
+    }
+    res.json({ deleted, message: `Reset music leads — ${deleted} deleted, pitched/signed preserved` })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // Merge resolve.py result with existing artist data.
 // All contact fields fall back to whatever was in the DB — a failed re-scan
 // never wipes a valid stored contact. Quality is re-derived from merged data.

@@ -64,6 +64,10 @@ export default function Dashboard({ API, onSelect }) {
   const [instaDiscoveryLog, setInstaDiscoveryLog] = useState([])
   const [instaDiscoveryProgress, setInstaDiscoveryProgress] = useState(0)
   const [verifyStatus, setVerifyStatus] = useState(null)
+  const [resetMusicOpen, setResetMusicOpen] = useState(false)
+  const [resetMusicCount, setResetMusicCount] = useState(null)
+  const [resetMusicConfirm, setResetMusicConfirm] = useState(false)
+  const [resettingMusic, setResettingMusic] = useState(false)
 
   const searchTimer = useRef(null)
   const searchMounted = useRef(false)
@@ -486,6 +490,29 @@ export default function Dashboard({ API, onSelect }) {
       alert("Flush failed — check the server.")
     }
     setFlushing(false)
+  }
+
+  const openResetMusic = async () => {
+    setResetMusicOpen(true)
+    setResetMusicConfirm(false)
+    try {
+      const r = await fetch(`${API}/api/flush/reset-music/preview`)
+      const d = await r.json()
+      setResetMusicCount(d.count ?? 0)
+    } catch { setResetMusicCount(0) }
+  }
+
+  const doResetMusic = async () => {
+    if (!resetMusicConfirm) { setResetMusicConfirm(true); return }
+    setResettingMusic(true)
+    try {
+      await fetch(`${API}/api/flush/reset-music`, { method: 'DELETE' })
+    } catch {}
+    setResettingMusic(false)
+    setResetMusicOpen(false)
+    setResetMusicCount(null)
+    setResetMusicConfirm(false)
+    fetchArtists()
   }
 
   // ── Selection & Mass Actions ──────────────────────────────────────────────────
@@ -1035,6 +1062,36 @@ export default function Dashboard({ API, onSelect }) {
         </div>
       )}
 
+      {/* ── Reset Music modal ── */}
+      {resetMusicOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ background: "rgba(13,5,5,0.96)", border: "1px solid #cc222244", borderRadius: 16, padding: "2rem", maxWidth: 480, width: "90%", display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ color: "#fff", fontWeight: 700, fontSize: 18, letterSpacing: "-0.02em" }}>Reset Music Leads</div>
+            <div style={{ color: "#666", fontSize: 13, lineHeight: 1.6 }}>
+              Deletes <strong style={{ color: "#ff4444" }}>all music leads</strong> except Pitched and Signed.<br />
+              Use this for a fresh start before running new discovery.
+            </div>
+            <div style={{ background: "#1a0000", border: "0.5px solid #3a1010", borderRadius: 8, padding: "14px 18px" }}>
+              {resetMusicCount === null
+                ? <div style={{ color: "#555", fontSize: 14 }}>Loading count...</div>
+                : <div style={{ color: "#ff4444", fontSize: 24, fontWeight: 700 }}>{resetMusicCount} leads will be deleted</div>
+              }
+              <div style={{ color: "#444", fontSize: 12, marginTop: 6 }}>Pitched + Signed leads are always kept.</div>
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={() => { setResetMusicOpen(false); setResetMusicConfirm(false) }} style={{ background: "#1a1a1a", border: "0.5px solid #333", borderRadius: 8, padding: "9px 20px", color: "#888", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+              <button
+                onClick={doResetMusic}
+                disabled={resettingMusic || resetMusicCount === 0}
+                style={{ background: resettingMusic ? "#333" : resetMusicConfirm ? "#aa1111" : "#cc1111", border: "none", borderRadius: 8, padding: "9px 22px", color: "#fff", fontSize: 13, fontWeight: 700, cursor: (resettingMusic || resetMusicCount === 0) ? "default" : "pointer" }}
+              >
+                {resettingMusic ? "Deleting..." : resetMusicConfirm ? "Click Again to Confirm" : `Delete ${resetMusicCount ?? "?"} Leads`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Floating mass-action bar ── */}
       {selectedIds.size > 0 && (
         <div style={{
@@ -1177,6 +1234,9 @@ export default function Dashboard({ API, onSelect }) {
               </button>
               <button onClick={previewFlush} style={btnStyle("#1a0808", "0.5px solid #3a1515", "#cc4444")}>
                 {mob ? "Flush" : "Flush Junk"}
+              </button>
+              <button onClick={openResetMusic} style={btnStyle("linear-gradient(135deg,#1a0000,#330000)", "1px solid #cc222244", "#ff4444", { fontWeight: 700 })}>
+                Reset Music
               </button>
             </div>
           </div>

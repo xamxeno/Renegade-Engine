@@ -60,28 +60,41 @@ _BAD_IG_PATHS = {
     'create', 'directory', 'challenge', 'share', 'reel',
 }
 
-# DuckDuckGo queries targeting Instagram artist profiles
+# DuckDuckGo queries — Google-style boolean syntax for precision targeting
 DDG_SEARCHES = [
-    'site:instagram.com "rnb" "unsigned" OR "independent" singer -producer -dj',
-    'site:instagram.com "rapper" "independent" "new music" -producer',
-    'site:instagram.com "r&b" singer songwriter unsigned OR independent',
-    'site:instagram.com "trap soul" artist music -producer',
-    'site:instagram.com "neo soul" singer artist independent',
-    'site:instagram.com "melodic rapper" unsigned OR independent',
-    'site:instagram.com "new single" rnb OR rap singer artist',
-    'site:instagram.com "uk rnb" singer OR artist unsigned',
-    'site:instagram.com "canadian" rapper OR singer unsigned independent',
-    'site:instagram.com "australian" rapper OR singer rnb independent',
-    'site:instagram.com "dubai" OR "uae" rnb OR rap artist',
-    'site:instagram.com "dms open" singer OR rapper rnb OR rap',
-    'site:instagram.com "for bookings" rnb OR rap singer artist',
-    'site:instagram.com "out now" rnb singer unsigned',
-    'site:instagram.com "on all platforms" rnb OR rap artist independent',
-    'site:instagram.com "unsigned artist" rnb OR rap OR soul',
-    'site:instagram.com "independent artist" rnb OR rap 2025',
-    'site:instagram.com "vocalist" "new music" unsigned OR independent',
-    'site:instagram.com "soundcloud" rapper OR singer unsigned 2025',
-    'site:instagram.com "new music friday" rnb rapper artist independent',
+    # Underground/independent rappers by region
+    'site:instagram.com "underground rapper" ("USA" OR "United States") -"producer" -"engineer"',
+    'site:instagram.com "underground rapper" ("UK" OR "United Kingdom" OR "London") -"producer"',
+    'site:instagram.com "underground rapper" ("Canada" OR "Toronto" OR "Montreal") -"producer"',
+    'site:instagram.com "underground rapper" ("Australia" OR "Sydney" OR "Melbourne") -"producer"',
+
+    # R&B/soul singers unsigned
+    'site:instagram.com "independent artist" ("r&b" OR "rnb") ("USA" OR "United States") -"producer" -"dj"',
+    'site:instagram.com "unsigned" ("r&b singer" OR "rnb singer") ("UK" OR "Canada" OR "Australia")',
+    'site:instagram.com "neo soul" ("independent" OR "unsigned") ("USA" OR "UK") -"producer" -"engineer"',
+    'site:instagram.com "trap soul" ("independent artist" OR "unsigned artist") -"producer" -"beatmaker"',
+
+    # Active release signals
+    'site:instagram.com "new single out now" ("rapper" OR "singer") ("USA" OR "UK" OR "Canada") -"producer"',
+    'site:instagram.com "out now on all platforms" ("rapper" OR "singer" OR "artist") -"producer" -"dj"',
+    'site:instagram.com "streaming everywhere" ("independent" OR "unsigned") ("rapper" OR "singer")',
+    'site:instagram.com "music video out" ("independent artist" OR "unsigned artist") -"producer"',
+
+    # DM/booking open signals (high outreach potential)
+    'site:instagram.com "dms open" ("rapper" OR "singer" OR "artist") ("USA" OR "UK" OR "Canada") -"producer"',
+    'site:instagram.com "for bookings" ("r&b" OR "rap" OR "rnb") ("USA" OR "UK" OR "Canada") -"producer"',
+    'site:instagram.com "booking email" ("rapper" OR "singer") ("independent" OR "unsigned") -"producer"',
+
+    # Genre-specific
+    'site:instagram.com "melodic rapper" ("independent" OR "unsigned") ("USA" OR "UK" OR "Canada" OR "Australia")',
+    'site:instagram.com "singer songwriter" ("independent" OR "unsigned") ("r&b" OR "rnb" OR "soul") -"producer"',
+    'site:instagram.com "vocalist" ("independent artist" OR "unsigned artist") ("USA" OR "UK" OR "Canada")',
+
+    # UAE/Dubai market
+    'site:instagram.com ("rapper" OR "r&b singer") ("Dubai" OR "UAE" OR "Abu Dhabi") "independent" -"producer"',
+
+    # Fresh 2025 signal
+    'site:instagram.com "independent artist" ("rap" OR "r&b" OR "rnb") "2025" ("USA" OR "UK" OR "Canada") -"producer" -"dj"',
 ]
 
 
@@ -115,53 +128,112 @@ def ddg_search(query, max_handles=20):
         return []
 
 
-_IG_HEADERS = {
-    "User-Agent":   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-    "x-ig-app-id":  "936619743392459",
-    "Referer":      "https://www.instagram.com/",
-    "Origin":       "https://www.instagram.com",
-    "Accept":       "*/*",
+_IG_PAGE_HEADERS = {
+    "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "DNT":             "1",
+    "Connection":      "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest":  "document",
+    "Sec-Fetch-Mode":  "navigate",
+    "Sec-Fetch-Site":  "none",
+    "Sec-Fetch-User":  "?1",
 }
+
+def _parse_ig_followers(fstr):
+    """Parse '12.5K', '1,234', '2M' etc. → int."""
+    fstr = fstr.replace(',', '').strip()
+    try:
+        if fstr.upper().endswith('M'):
+            return int(float(fstr[:-1]) * 1_000_000)
+        if fstr.upper().endswith('K'):
+            return int(float(fstr[:-1]) * 1_000)
+        return int(float(fstr))
+    except:
+        return 0
 
 
 def fetch_ig_profile(handle):
-    """Fetch Instagram profile via unofficial API. Returns dict or None."""
+    """Fetch Instagram profile by scraping public profile page og: meta tags."""
     for attempt in range(2):
         try:
             r = requests.get(
-                "https://i.instagram.com/api/v1/users/web_profile_info/",
-                params={"username": handle},
-                headers=_IG_HEADERS,
-                timeout=12,
+                f"https://www.instagram.com/{handle}/",
+                headers=_IG_PAGE_HEADERS,
+                timeout=15,
+                allow_redirects=True,
             )
             if r.status_code == 429:
-                print("  [IG] Rate limited — waiting 30s")
-                time.sleep(30)
+                wait = int(r.headers.get("Retry-After", 45))
+                print(f"  [IG] Rate limited — waiting {min(wait,60)}s")
+                time.sleep(min(wait, 60))
                 continue
             if r.status_code != 200:
                 return None
-            user = r.json().get("data", {}).get("user") or {}
-            if not user:
+
+            html = r.text
+
+            # Check for login redirect (Instagram blocks bots)
+            if 'login' in r.url or 'accounts/login' in html[:500]:
                 return None
 
-            bio   = user.get("biography") or ""
-            email = user.get("business_email") or user.get("public_email") or ""
-            if not email:
-                m = re.search(r'[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}', bio)
-                if m:
-                    email = m.group(0)
+            # og:description — "12.5K Followers, 234 Following, 52 Posts - Bio text"
+            desc_m = re.search(r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)["\']', html)
+            if not desc_m:
+                desc_m = re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:description["\']', html)
+            if not desc_m:
+                return None
+            desc = desc_m.group(1)
+
+            # Parse follower count
+            fol_m = re.match(r'([\d,.]+[KMkm]?)\s+Followers', desc, re.IGNORECASE)
+            if not fol_m:
+                return None
+            followers = _parse_ig_followers(fol_m.group(1))
+
+            # Extract bio (text after "N Posts - ")
+            bio = ""
+            bio_m = re.search(r'\d[\d,]*\s+Posts\s*[-–]\s*(.+)', desc, re.IGNORECASE)
+            if bio_m:
+                bio = bio_m.group(1).strip()
+
+            # og:title — "Name (@handle) • Instagram..."
+            name = handle
+            title_m = re.search(r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)["\']', html)
+            if not title_m:
+                title_m = re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:title["\']', html)
+            if title_m:
+                nm = re.match(r'^(.+?)\s*[\(@•]', title_m.group(1))
+                if nm:
+                    name = nm.group(1).strip()
+
+            is_private = '"is_private":true' in html or '"isPrivate":true' in html
+
+            email = ""
+            em = re.search(r'[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}', bio)
+            if em:
+                email = em.group(0)
+
+            img = ""
+            img_m = re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']', html)
+            if not img_m:
+                img_m = re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']', html)
+            if img_m:
+                img = img_m.group(1)
 
             return {
-                "name":       (user.get("full_name") or handle).strip(),
+                "name":       name,
                 "bio":        bio,
-                "followers":  (user.get("edge_followed_by") or {}).get("count") or 0,
-                "is_private": user.get("is_private", False),
-                "image_url":  user.get("profile_pic_url_hd") or user.get("profile_pic_url") or "",
+                "followers":  followers,
+                "is_private": is_private,
+                "image_url":  img,
                 "email":      email,
             }
         except Exception:
             if attempt == 0:
-                time.sleep(2)
+                time.sleep(3)
     return None
 
 
@@ -333,7 +405,7 @@ def run():
                 all_handles.append(h)
                 new_count += 1
         print(f"  [{i}/{len(DDG_SEARCHES)}] {new_count} new handles found")
-        time.sleep(random.uniform(2.5, 4.5))  # DDG rate limit buffer
+        time.sleep(random.uniform(12, 20))  # DDG rate limit buffer
 
     print(f"\n  Total unique new handles: {len(all_handles)}")
     random.shuffle(all_handles)
@@ -343,10 +415,14 @@ def run():
     candidates = []
     skip_followers = skip_no_music = skip_producer = skip_region = skip_private = 0
 
+    fail_count = 0
     for i, handle in enumerate(all_handles, 1):
         profile = fetch_ig_profile(handle)
         if not profile:
-            time.sleep(0.5)
+            fail_count += 1
+            if fail_count <= 3:
+                print(f"  [{i}/{len(all_handles)}] @{handle} — could not fetch (login wall or blocked)")
+            time.sleep(1.5)
             continue
 
         name      = profile["name"]

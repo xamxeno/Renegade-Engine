@@ -62,7 +62,7 @@ CLAUDE_API_KEY        = os.getenv("CLAUDE_API_KEY", "")
 SUPABASE_URL          = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY          = os.getenv("SUPABASE_KEY", "")
 
-TARGET_LEADS  = 50          # keep scanning until this many NEW leads saved
+TARGET_LEADS  = 100         # keep scanning until this many NEW leads saved
 MAX_LISTENERS = 100_000     # hard cap — skip immediately if over
 MIN_LISTENERS = 1_000       # minimum monthly listeners
 MIN_FOLLOWERS = 500         # minimum platform followers
@@ -1217,6 +1217,12 @@ def run():
         artist["contact_quality"] = "none"
         pool.append(artist)
 
+    # ── Emergency save: write candidates to disk NOW before scoring ──────────
+    emergency_file = os.path.join(os.path.dirname(__file__), f"leads_emergency_{session_id}.json")
+    with open(emergency_file, "w", encoding="utf-8") as f:
+        json.dump(pool, f, indent=2, ensure_ascii=False)
+    print(f"\n  Emergency save -> {os.path.basename(emergency_file)} ({len(pool)} candidates)")
+
     print(f"\n{'='*60}")
     print(f"  {len(pool)} candidates ready for scoring")
     print(f"{'='*60}")
@@ -1238,8 +1244,15 @@ def run():
         ans = "yes" if no_prompt else input("  Run scoring? (yes/no): ").strip().lower()
         if ans in ["yes", "y"]:
             for i in range(0, len(pool), 20):
-                score_batch(pool[i:i+20])
-                print(f"  Scored {min(i+20, len(pool))}/{len(pool)}")
+                batch = pool[i:i+20]
+                score_batch(batch)
+                # Save each scored batch immediately — protects against power loss
+                qualified_so_far = [a for a in batch if (a.get("score") or 0) >= MIN_SCORE and _passes_hard_filter(a)]
+                if qualified_so_far:
+                    save(qualified_so_far, session_id)
+                    print(f"  Scored {min(i+20, len(pool))}/{len(pool)} — {len(qualified_so_far)} saved to Supabase")
+                else:
+                    print(f"  Scored {min(i+20, len(pool))}/{len(pool)}")
                 time.sleep(1)
         else:
             print("  Skipped. All candidates will be saved unscored.")
@@ -1270,8 +1283,10 @@ def run():
         print("  No qualified leads — try adjusting MIN_SCORE or adding new keywords.")
         return
 
-    # ── Save — scores already set, so Supabase gets full data ────────────────
-    save(new_leads, session_id)
+    # ── Final save only if scoring was skipped (batches already saved above) ──
+    scoring_ran = CLAUDE_API_KEY and ans in ["yes", "y"]
+    if not scoring_ran:
+        save(new_leads, session_id)
     print(f"\n  {len(new_leads)} leads live. Enrichment worker will find Instagrams.")
     print("\n" + "="*60)
     print(f"  Session {session_id} complete.")

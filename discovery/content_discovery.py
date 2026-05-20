@@ -94,43 +94,44 @@ _BAD_IG_PATHS = {
 
 # Targeted searches for aesthetic/active influencers in Western markets
 YT_SEARCHES = [
-    # Lifestyle / aesthetic
-    "aesthetic lifestyle vlog USA 2024 2025",
-    "lifestyle influencer USA youtube instagram",
-    "aesthetic daily vlog girl USA",
-    "luxury lifestyle vlog USA influencer",
-    "aesthetic vlog UK lifestyle creator",
-    # Fitness / wellness
-    "fitness influencer USA youtube channel",
-    "gym lifestyle vlog USA aesthetic",
-    "wellness lifestyle creator USA youtube",
-    "fitness content creator UK instagram youtube",
-    "health and fitness influencer USA aesthetic",
-    # Fashion / beauty
-    "fashion content creator USA youtube instagram",
-    "style influencer USA youtube aesthetic",
-    "fashion vlog USA creator 2024 2025",
-    "beauty influencer USA youtube channel",
-    "fashion lifestyle creator UK australia",
-    # Travel / adventure
-    "travel influencer USA youtube channel",
-    "solo travel vlog aesthetic USA",
-    "travel lifestyle creator UK aesthetic",
-    "digital nomad lifestyle vlog creator",
-    "adventure travel vlog USA influencer",
-    # Entrepreneur / personal brand
-    "entrepreneur lifestyle vlog USA youtube",
-    "personal brand creator USA youtube instagram",
-    "entrepreneur influencer USA aesthetic youtube",
-    "business lifestyle creator USA youtube",
-    # Canada / UK / Australia / UAE
-    "lifestyle influencer Canada youtube instagram",
-    "aesthetic vlog creator Australia instagram",
-    "content creator UAE Dubai lifestyle",
-    "lifestyle influencer UK aesthetic youtube",
-    # Model / creator crossover
-    "model content creator USA youtube instagram",
-    "instagram influencer youtube channel USA aesthetic",
+    # Lifestyle / aesthetic — varied angles
+    "aesthetic lifestyle vlog girl 2025",
+    "day in my life vlog aesthetic USA",
+    "soft life vlog aesthetic creator USA",
+    "clean girl aesthetic vlog youtube",
+    "that girl lifestyle vlog USA 2025",
+    "minimalist lifestyle vlog creator",
+    # Fitness — specific niches
+    "pilates lifestyle vlog USA creator",
+    "gym girl vlog aesthetic USA youtube",
+    "fitness influencer morning routine vlog",
+    "calisthenics lifestyle vlog creator USA",
+    "running lifestyle vlog creator USA",
+    # Fashion / style
+    "style vlog fashion influencer USA 2025",
+    "ootd fashion vlog creator USA youtube",
+    "thrift fashion vlog creator aesthetic",
+    "streetwear vlog creator USA aesthetic",
+    "luxury fashion vlog influencer USA",
+    # Beauty
+    "skincare routine vlog influencer USA",
+    "makeup artist vlog creator USA aesthetic",
+    "beauty influencer youtube channel 2025",
+    # Travel / adventure — specific
+    "solo female travel vlog USA aesthetic",
+    "luxury travel vlog influencer USA",
+    "van life aesthetic vlog creator USA",
+    "europe travel vlog aesthetic creator",
+    "travel influencer australia vlog aesthetic",
+    # Entrepreneur / productivity
+    "productive day in my life vlog creator",
+    "female entrepreneur lifestyle vlog USA",
+    "boss babe lifestyle vlog creator USA",
+    # UK / Canada / Australia / UAE specific
+    "lifestyle vlog creator London UK 2025",
+    "aesthetic vlog creator Sydney Australia",
+    "lifestyle influencer Dubai UAE youtube",
+    "lifestyle vlog creator Toronto Canada aesthetic",
 ]
 
 
@@ -247,10 +248,11 @@ def is_recently_active(channel_id, months=MAX_INACTIVE_MONTHS):
         r = requests.get(url, headers=_BROWSER_HEADERS, timeout=10)
         if r.status_code != 200:
             return True  # Can't verify — give benefit of the doubt
-        # Grab the first <published> date in the feed (most recent video)
-        m = re.search(r"<published>([^<]+)</published>", r.text)
+        # The first <published> in the feed is the channel creation date.
+        # Video upload dates are inside <entry> blocks — grab the first one.
+        m = re.search(r"<entry>.*?<published>([^<]+)</published>", r.text, re.DOTALL)
         if not m:
-            return True  # No videos listed — new channel or private; keep for Claude to decide
+            return True  # No video entries — new/private channel; give benefit of the doubt
         pub_str = m.group(1).strip()
         # Format: 2024-03-15T18:22:31+00:00
         pub_dt = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
@@ -342,7 +344,6 @@ def save_to_supabase(artists, session_id):
         "apikey":        SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
         "Content-Type":  "application/json",
-        "Prefer":        "return=minimal",
     }
     ok = fail = 0
     for a in artists:
@@ -368,7 +369,11 @@ def save_to_supabase(artists, session_id):
             "notes":           f"YT: {yt_url} | subs: {a['subs_str']}",
         }
         try:
-            r = requests.post(f"{SUPABASE_URL}/rest/v1/artists", headers=headers, json=payload, timeout=10)
+            r = requests.post(
+                f"{SUPABASE_URL}/rest/v1/artists?on_conflict=platform_id",
+                headers={**headers, "Prefer": "resolution=merge-duplicates,return=minimal"},
+                json=payload, timeout=10
+            )
             if r.status_code in (200, 201):
                 ok += 1
             else:
