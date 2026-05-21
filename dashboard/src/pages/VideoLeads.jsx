@@ -110,13 +110,24 @@ export default function VideoLeads({ API, onSelect }) {
           if (!line.trim()) continue
           try {
             const msg = JSON.parse(line)
+            if (msg.ping) continue
             if (msg.log)                    setDiscoveryLog(l => [...l, msg.log])
             if (msg.progress !== undefined) setDiscoveryProgress(msg.progress)
             if (msg.done)                   { fetchArtists(); loadSessions() }
           } catch { setDiscoveryLog(l => [...l, line]) }
         }
       }
-    } catch (e) { setDiscoveryLog(l => [...l, `Error: ${e.message}`]) }
+    } catch (e) {
+      try {
+        const st = await fetch(`${API}/api/content-discover/status`).then(r => r.json())
+        if (st.running) {
+          setDiscoveryLog(l => [...l, '● Connection dropped — reconnecting...'])
+          await new Promise(ok => setTimeout(ok, 3000))
+          return streamDiscovery(false)
+        }
+      } catch {}
+      setDiscoveryLog(l => [...l, `Error: ${e.message}`])
+    }
     setDiscoveryRunning(false)
   }
 

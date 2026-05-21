@@ -1688,6 +1688,10 @@ app.post('/api/discovery/run', (req, res) => {
   res.setHeader('Content-Type', 'application/x-ndjson')
   res.setHeader('Transfer-Encoding', 'chunked')
   res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('X-Accel-Buffering', 'no') // disable Render/nginx proxy buffering
+
+  // Flush headers immediately so proxy doesn't buffer the connection
+  try { res.write('{"ping":true}\n') } catch {}
 
   // If already running, replay log history then subscribe to live updates
   if (_discovery.running) {
@@ -1698,7 +1702,10 @@ app.post('/api/discovery/run', (req, res) => {
   }
 
   // Start fresh discovery process
-  _discovery = { running: true, py: null, log: [], progress: 0, clients: [res] }
+  _discovery = { running: true, py: null, log: [], progress: 0, clients: [res], heartbeat: null }
+
+  // Heartbeat every 20s — keeps Render proxy from killing idle connections during startup
+  _discovery.heartbeat = setInterval(() => discoveryBroadcast({ ping: true }), 20000)
 
   const discoveryPath = path.join(__dirname, '../discovery/discovery.py')
   const py = spawn('python', [discoveryPath, '--no-prompt'], {
@@ -1739,6 +1746,7 @@ app.post('/api/discovery/run', (req, res) => {
   })
 
   py.on('close', () => {
+    clearInterval(_discovery.heartbeat)
     const final = { progress: 100, done: true, log: '=== Discovery finished ===' }
     emit(final)
     _discovery.running = false
@@ -1748,6 +1756,7 @@ app.post('/api/discovery/run', (req, res) => {
   })
 
   py.on('error', err => {
+    clearInterval(_discovery.heartbeat)
     emit({ log: `ERROR: ${err.message}`, done: true })
     _discovery.running = false
     _discovery.clients.forEach(r => { try { r.end() } catch {} })
@@ -1776,6 +1785,9 @@ app.post('/api/insta-discover', (req, res) => {
   res.setHeader('Content-Type', 'application/x-ndjson')
   res.setHeader('Transfer-Encoding', 'chunked')
   res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('X-Accel-Buffering', 'no')
+
+  try { res.write('{"ping":true}\n') } catch {}
 
   if (_igDiscovery.running) {
     _igDiscovery.log.forEach(obj => { try { res.write(JSON.stringify(obj) + "\n") } catch {} })
@@ -1784,7 +1796,8 @@ app.post('/api/insta-discover', (req, res) => {
     return
   }
 
-  _igDiscovery = { running: true, py: null, log: [], progress: 0, clients: [res] }
+  _igDiscovery = { running: true, py: null, log: [], progress: 0, clients: [res], heartbeat: null }
+  _igDiscovery.heartbeat = setInterval(() => igDiscoveryBroadcast({ ping: true }), 20000)
 
   const scriptPath = path.join(__dirname, '../discovery/insta_discovery.py')
   const py = spawn('python', [scriptPath, '--no-prompt'], { cwd: path.join(__dirname, '../discovery') })
@@ -1812,6 +1825,7 @@ app.post('/api/insta-discover', (req, res) => {
   })
 
   py.on('close', () => {
+    clearInterval(_igDiscovery.heartbeat)
     emit({ progress: 100, done: true, log: '=== Instagram Discovery finished ===' })
     _igDiscovery.running = false
     _igDiscovery.py = null
@@ -1820,6 +1834,7 @@ app.post('/api/insta-discover', (req, res) => {
   })
 
   py.on('error', err => {
+    clearInterval(_igDiscovery.heartbeat)
     emit({ log: `ERROR: ${err.message}`, done: true })
     _igDiscovery.running = false
     _igDiscovery.clients.forEach(r => { try { r.end() } catch {} })
@@ -1845,6 +1860,9 @@ app.post('/api/content-discover', (req, res) => {
   res.setHeader('Content-Type', 'application/x-ndjson')
   res.setHeader('Transfer-Encoding', 'chunked')
   res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('X-Accel-Buffering', 'no')
+
+  try { res.write('{"ping":true}\n') } catch {}
 
   if (_contentDiscovery.running) {
     _contentDiscovery.log.forEach(obj => { try { res.write(JSON.stringify(obj) + "\n") } catch {} })
@@ -1853,7 +1871,8 @@ app.post('/api/content-discover', (req, res) => {
     return
   }
 
-  _contentDiscovery = { running: true, py: null, log: [], progress: 0, clients: [res] }
+  _contentDiscovery = { running: true, py: null, log: [], progress: 0, clients: [res], heartbeat: null }
+  _contentDiscovery.heartbeat = setInterval(() => contentDiscoveryBroadcast({ ping: true }), 20000)
 
   const scriptPath = path.join(__dirname, '../discovery/content_discovery.py')
   const py = spawn('python', [scriptPath, '--no-prompt'], { cwd: path.join(__dirname, '../discovery') })
@@ -1881,6 +1900,7 @@ app.post('/api/content-discover', (req, res) => {
   })
 
   py.on('close', () => {
+    clearInterval(_contentDiscovery.heartbeat)
     emit({ progress: 100, done: true, log: '=== Creator Discovery finished ===' })
     _contentDiscovery.running = false
     _contentDiscovery.py = null
@@ -1889,6 +1909,7 @@ app.post('/api/content-discover', (req, res) => {
   })
 
   py.on('error', err => {
+    clearInterval(_contentDiscovery.heartbeat)
     emit({ log: `ERROR: ${err.message}`, done: true })
     _contentDiscovery.running = false
     _contentDiscovery.clients.forEach(r => { try { r.end() } catch {} })
