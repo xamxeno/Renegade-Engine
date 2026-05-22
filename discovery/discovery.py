@@ -62,7 +62,7 @@ CLAUDE_API_KEY        = os.getenv("CLAUDE_API_KEY", "")
 SUPABASE_URL          = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY          = os.getenv("SUPABASE_KEY", "")
 
-TARGET_LEADS  = 100         # keep scanning until this many NEW leads saved
+TARGET_LEADS  = 50          # keep scanning until this many NEW leads saved
 MAX_LISTENERS = 100_000     # hard cap — skip immediately if over
 MIN_LISTENERS = 1_000       # minimum monthly listeners
 MIN_FOLLOWERS = 500         # minimum platform followers
@@ -963,6 +963,26 @@ def scan_instagram(artist):
         artist["contact_quality"] = "contactless"
 
 # ── CLAUDE SCORING ─────────────────────────────────────────────────────────────
+# Max candidates sent to Claude per run — controls API cost.
+# Haiku 4.5 = ~$0.005 per batch of 20.  100 artists = 5 batches ≈ $0.025 max.
+# Early-exit fires when TARGET_LEADS qualified leads found — usually costs less.
+CLAUDE_SCORE_LIMIT = 100
+
+def _rule_prescore(a):
+    """Fast heuristic pre-score — picks best candidates before calling Claude."""
+    s = 0
+    listeners = a.get("listeners") or a.get("followers") or 0
+    genres    = " ".join(a.get("genres") or []).lower()
+    needs     = (a.get("needs") or "").lower()
+    if 1_000 <= listeners <= 10_000:  s += 40
+    elif listeners <= 20_000:         s += 20
+    elif listeners <= 35_000:         s += 5
+    else:                             s -= 30
+    if any(g in genres for g in ["r-n-b","rnb","r&b","hip-hop","hip hop","soul","trap","neo"]): s += 25
+    if any(kw in needs for kw in ["managed","booking","warner","universal","sony","atlantic","columbia"]): s -= 100
+    if "producer:" in needs: s -= 50
+    return s
+
 def score_batch(artists):
     if not CLAUDE_API_KEY:
         for a in artists:
@@ -1002,7 +1022,7 @@ HARD ZERO:
 
 NOTE: high ig_followers with low engagement suggests bought followers — this can mean the artist is still unsigned and reachable. Do not penalize for high ig_followers alone.
 
-Return ONLY valid JSON array:
+Return ONLY a valid JSON array — no explanation, no markdown, just the array:
 [{{"index": 0, "score": 82, "reason": "One sentence citing listeners + genre + needs", "is_solo_artist": true}}]
 
 Artists:
@@ -1017,7 +1037,12 @@ Artists:
                   "messages": [{"role": "user", "content": prompt}]}, timeout=40)
         raw = r.json()["content"][0]["text"].strip()
         raw = re.sub(r"```json?\n?", "", raw).replace("```","").strip()
-        for s in json.loads(raw):
+        # Robustly extract JSON array even if Claude adds text before/after
+        arr_start = raw.find('[')
+        arr_end   = raw.rfind(']')
+        if arr_start == -1 or arr_end <= arr_start:
+            raise ValueError(f"No JSON array in response: {raw[:120]!r}")
+        for s in json.loads(raw[arr_start:arr_end + 1]):
             idx = s.get("index", -1)
             if 0 <= idx < len(artists):
                 artists[idx]["score"]        = s.get("score", 0)
@@ -1237,22 +1262,36 @@ def run():
                     "warner","universal","sony","atlantic","columbia","interscope","def jam","rca"]
         return not any(kw in needs for kw in label_kw)
 
+    # ── Pre-sort by rules — best candidates scored first ─────────────────────
+    pool.sort(key=_rule_prescore, reverse=True)
+    # Score only the top CLAUDE_SCORE_LIMIT — rest are implicitly below threshold
+    scoring_pool = pool[:CLAUDE_SCORE_LIMIT]
+    for a in pool[CLAUDE_SCORE_LIMIT:]:
+        if a.get("score") is None:
+            a["score"] = 0  # won't qualify
+
     no_prompt = "--no-prompt" in sys.argv
     if CLAUDE_API_KEY:
-        est = (len(pool) / 20) * 0.06
-        print(f"\n  CLAUDE AI SCORING — {len(pool)} artists (~${est:.2f})")
+        n_batches = max(1, (len(scoring_pool) + 19) // 20)
+        est = n_batches * 0.005  # Haiku 4.5: ~$0.005/batch of 20
+        print(f"\n  CLAUDE AI SCORING — top {len(scoring_pool)} candidates (~${est:.3f})")
         ans = "yes" if no_prompt else input("  Run scoring? (yes/no): ").strip().lower()
         if ans in ["yes", "y"]:
-            for i in range(0, len(pool), 20):
-                batch = pool[i:i+20]
+            total_saved = 0
+            for i in range(0, len(scoring_pool), 20):
+                if total_saved >= TARGET_LEADS:
+                    print(f"  Target of {TARGET_LEADS} leads reached — stopping early")
+                    break
+                batch = scoring_pool[i:i+20]
                 score_batch(batch)
                 # Save each scored batch immediately — protects against power loss
                 qualified_so_far = [a for a in batch if (a.get("score") or 0) >= MIN_SCORE and _passes_hard_filter(a)]
                 if qualified_so_far:
                     save(qualified_so_far, session_id)
-                    print(f"  Scored {min(i+20, len(pool))}/{len(pool)} — {len(qualified_so_far)} saved to Supabase")
+                    total_saved += len(qualified_so_far)
+                    print(f"  Scored {min(i+20, len(scoring_pool))}/{len(scoring_pool)} — {len(qualified_so_far)} saved ({total_saved} total)")
                 else:
-                    print(f"  Scored {min(i+20, len(pool))}/{len(pool)}")
+                    print(f"  Scored {min(i+20, len(scoring_pool))}/{len(scoring_pool)}")
                 time.sleep(1)
         else:
             print("  Skipped. All candidates will be saved unscored.")
