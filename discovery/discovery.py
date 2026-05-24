@@ -963,22 +963,21 @@ def scan_instagram(artist):
         artist["contact_quality"] = "contactless"
 
 # ── CLAUDE SCORING ─────────────────────────────────────────────────────────────
-# Max candidates sent to Claude per run — controls API cost.
-# Haiku 4.5 = ~$0.005 per batch of 20.  100 artists = 5 batches ≈ $0.025 max.
-# Early-exit fires when TARGET_LEADS qualified leads found — usually costs less.
-CLAUDE_SCORE_LIMIT = 100
+# Haiku 4.5 = ~$0.005/batch of 20. Early-exit stops scoring once 50 leads saved.
+# Typical cost: ~$0.02–0.04/run. Max (no early exit, 400 candidates): ~$0.10.
+CLAUDE_SCORE_LIMIT = 400  # score the full pool — early exit handles the cost cap
 
 def _rule_prescore(a):
-    """Fast heuristic pre-score — picks best candidates before calling Claude."""
+    """Heuristic pre-sort — highest scorers sent to Claude first so early-exit fires sooner."""
     s = 0
     listeners = a.get("listeners") or a.get("followers") or 0
     genres    = " ".join(a.get("genres") or []).lower()
     needs     = (a.get("needs") or "").lower()
-    if 1_000 <= listeners <= 10_000:  s += 40
-    elif listeners <= 20_000:         s += 20
-    elif listeners <= 35_000:         s += 5
-    else:                             s -= 30
-    if any(g in genres for g in ["r-n-b","rnb","r&b","hip-hop","hip hop","soul","trap","neo"]): s += 25
+    if 1_000 <= listeners <= 15_000:  s += 50
+    elif listeners <= 40_000:         s += 25
+    elif listeners <= 60_000:         s += 5
+    else:                             s -= 200  # above 60k = Claude hard zero, skip first
+    if any(g in genres for g in ["r-n-b","rnb","r&b","hip-hop","hip hop","soul","trap","neo"]): s += 30
     if any(kw in needs for kw in ["managed","booking","warner","universal","sony","atlantic","columbia"]): s -= 100
     if "producer:" in needs: s -= 50
     return s
@@ -1002,28 +1001,30 @@ def score_batch(artists):
         "contact_quality": a.get("contact_quality", "none"),
     } for i, a in enumerate(artists)]
 
-    prompt = f"""You are a lead-scoring analyst for Renegade Records — a recording studio (mixing, mastering, beat production, artist development) targeting INDEPENDENT artists who genuinely need professional help RIGHT NOW.
+    prompt = f"""You are a lead-scoring analyst for Renegade Records — a recording studio (mixing, mastering, beat production, artist development) targeting INDEPENDENT artists who need professional help.
 
-Sweet-spot client: solo performer, unsigned/self-managed, 1k–15k monthly listeners, R&B / Hip-Hop / Neo Soul / Trap Soul genre, US/Canada/UK/Australia/UAE, zero label backing, contactable directly.
+Sweet-spot: solo performer, unsigned/self-managed, 1k–40k monthly listeners, R&B / Hip-Hop / Neo Soul / Trap Soul / Afro-R&B genre, US/Canada/UK/Australia/UAE, zero label backing.
 
-SCORING RULES:
-90-100  PERFECT: 1k–10k listeners + R&B/Hip-Hop/Neo Soul/Trap Soul + indie/DIY signals + no management
-80-89   STRONG: 10k–20k listeners OR 1k–10k with neutral needs, genre matches
-70-79   GOOD: 20k–35k listeners, genre matches, no management flags
-60-69   BORDERLINE: good genre + under 20k but some flag (empty needs, minimal data)
-0-59    DO NOT USE
+HOW TO SCORE (0–100):
+- 1k–15k listeners + target genre → 75–95
+- 15k–40k listeners + target genre → 65–80
+- 40k–60k listeners + target genre → 60–70
+- Any range but minor red flags (edge genre, vague label hints) → subtract 5–15 points
+- Strong red flags → 0–30
 
-HARD ZERO:
-- Producer, beatmaker, DJ, audio engineer (even if they also perform)
-- Radio station, playlist, compilation, orchestra, collective
-- Genres outside target: reggaeton, afrobeats, K-pop, Bollywood, country, rock, EDM, house, jazz, classical
-- Listeners above 35k
-- needs contains: producer:, managed by, booking:, warner, universal, sony, atlantic, columbia
+HARD ZERO (score = 0, is_solo_artist = false):
+- Producer, beatmaker, DJ, audio engineer, mixer, mastering studio, label, radio station, playlist, collective, band
+- Genre clearly off-target: reggaeton, K-pop, Bollywood, country, EDM, house, jazz, classical, gospel
+- Listeners above 60k
+- needs field contains: "managed by", "booking:", "warner", "universal", "sony", "atlantic", "columbia", "interscope", "def jam", "rca"
 
-NOTE: high ig_followers with low engagement suggests bought followers — this can mean the artist is still unsigned and reachable. Do not penalize for high ig_followers alone.
+IMPORTANT RULES:
+- Empty needs is NORMAL — most indie artists have no Spotify bio. Do NOT lower the score for empty needs.
+- Give every artist a DISTINCT score — no two artists in this batch should share the same number.
+- Score 60+ = qualified lead. Score 0–59 = skip.
 
 Return ONLY a valid JSON array — no explanation, no markdown, just the array:
-[{{"index": 0, "score": 82, "reason": "One sentence citing listeners + genre + needs", "is_solo_artist": true}}]
+[{{"index": 0, "score": 82, "reason": "One sentence: listeners + genre + key signal", "is_solo_artist": true}}]
 
 Artists:
 {json.dumps(batch)}"""
@@ -1205,7 +1206,7 @@ def run():
                 s["hits"] += new_hits
                 print(f"    [{i}/{len(ordered_queries)}] '{query}' -> {new_hits} new (total: {len(all_candidates)})")
                 time.sleep(0.3)
-                if len(all_candidates) >= TARGET_LEADS * 5:
+                if len(all_candidates) >= TARGET_LEADS * 8:
                     print(f"  Enough candidates ({len(all_candidates)}) — skipping remaining keywords")
                     break
             save_keyword_stats(kw_stats)
