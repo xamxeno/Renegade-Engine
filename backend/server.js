@@ -934,6 +934,62 @@ app.delete('/api/flush/reset-music', async (req, res) => {
   }
 })
 
+// POST /api/artists/sync-latest-file — push the most recent leads_*.json to Supabase
+// Lets you re-sync a previous discovery run without hitting Spotify again
+app.post('/api/artists/sync-latest-file', async (req, res) => {
+  try {
+    const fs = require('fs')
+    const discoveryDir = path.join(__dirname, '../discovery')
+    const files = fs.readdirSync(discoveryDir)
+      .filter(f => f.startsWith('leads_') && f.endsWith('.json'))
+      .sort().reverse()
+
+    if (!files.length) {
+      return res.json({ ok: false, error: 'No leads files found in discovery directory' })
+    }
+
+    const file = files[0]
+    const raw = fs.readFileSync(path.join(discoveryDir, file), 'utf-8')
+    const artists = JSON.parse(raw)
+
+    let ok = 0, fail = 0, errors = []
+    for (const a of artists) {
+      const payload = {
+        name:            a.name,
+        platform:        a.platform,
+        platform_id:     a.platform_id || a.name,
+        followers:       a.followers   || 0,
+        listeners:       a.listeners   || a.followers || 0,
+        genres:          typeof a.genres === 'string' ? a.genres : JSON.stringify(a.genres || []),
+        profile_url:     a.profile_url  || '',
+        image_url:       a.image_url    || '',
+        instagram:       a.instagram    || null,
+        email:           a.email        || null,
+        contact_quality: a.contact_quality || 'none',
+        score:           a.score        || 0,
+        score_reason:    a.score_reason || '',
+        needs:           a.needs        || null,
+        status:          'new',
+        session_id:      a.session_id   || null,
+      }
+      const { error } = await supabase.from('artists').upsert(payload, {
+        onConflict: 'platform,platform_id',
+        ignoreDuplicates: false
+      })
+      if (error) {
+        fail++
+        if (errors.length < 3) errors.push(`${a.name}: ${error.message}`)
+      } else {
+        ok++
+      }
+    }
+
+    res.json({ ok: true, file, total: artists.length, synced: ok, failed: fail, errors })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
 // Merge resolve.py result with existing artist data.
 // All contact fields fall back to whatever was in the DB — a failed re-scan
 // never wipes a valid stored contact. Quality is re-derived from merged data.

@@ -1060,9 +1060,17 @@ Artists:
 def save(artists, session_id=None):
     ts       = session_id or datetime.now().strftime("%Y%m%d_%H%M")
     filename = f"leads_{ts}.json"
+    existing = []
+    if os.path.exists(filename):
+        try:
+            with open(filename, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+        except Exception:
+            existing = []
+    all_leads = existing + artists
     with open(filename, "w", encoding="utf-8") as f:
-        json.dump(artists, f, indent=2, ensure_ascii=False)
-    print(f"\n  Saved -> {filename}")
+        json.dump(all_leads, f, indent=2, ensure_ascii=False)
+    print(f"\n  Saved -> {filename} ({len(all_leads)} total)")
 
     if not SUPABASE_URL or not SUPABASE_KEY:
         print("  [Supabase] No credentials — saved locally only")
@@ -1103,16 +1111,16 @@ def save(artists, session_id=None):
             payload["session_id"] = ts
 
         try:
-            res = requests.post(f"{SUPABASE_URL}/rest/v1/artists",
+            res = requests.post(f"{SUPABASE_URL}/rest/v1/artists?on_conflict=platform%2Cplatform_id",
                                 headers=headers, json=payload, timeout=10)
-            if res.status_code in (200, 201):
+            if res.status_code in (200, 201, 204):
                 ok += 1
             elif "session_id" in res.text and res.status_code in (400, 422):
                 _session_col_missing = True
                 payload.pop("session_id", None)
-                res2 = requests.post(f"{SUPABASE_URL}/rest/v1/artists",
+                res2 = requests.post(f"{SUPABASE_URL}/rest/v1/artists?on_conflict=platform%2Cplatform_id",
                                      headers=headers, json=payload, timeout=10)
-                if res2.status_code in (200, 201):
+                if res2.status_code in (200, 201, 204):
                     ok += 1
                     if first_error is None:
                         first_error = "MISSING COLUMN: ALTER TABLE artists ADD COLUMN IF NOT EXISTS session_id text;"

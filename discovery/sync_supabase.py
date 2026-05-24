@@ -74,11 +74,11 @@ def run():
             "status":       "new"
         }
         res = requests.post(
-            f"{SUPABASE_URL}/rest/v1/artists",
+            f"{SUPABASE_URL}/rest/v1/artists?on_conflict=platform%2Cplatform_id",
             headers=headers_options[0],
             json=payload
         )
-        if res.status_code in [200, 201]:
+        if res.status_code in [200, 201, 204]:
             ok += 1
         else:
             failed += 1

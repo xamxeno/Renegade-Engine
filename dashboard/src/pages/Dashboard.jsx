@@ -303,6 +303,21 @@ export default function Dashboard({ API, onSelect }) {
 
   const runDiscovery = () => streamDiscovery(true)
 
+  const syncFromFile = async () => {
+    try {
+      const d = await fetch(`${API}/api/artists/sync-latest-file`, { method: 'POST' }).then(r => r.json())
+      if (d.ok) {
+        alert(`Synced ${d.synced}/${d.total} leads from ${d.file}${d.failed ? ` (${d.failed} failed)` : ''}`)
+        fetchArtists()
+        loadSessions()
+      } else {
+        alert(`Sync failed: ${d.error}`)
+      }
+    } catch (e) {
+      alert(`Error: ${e.message}`)
+    }
+  }
+
   const streamInstaDiscovery = async (fresh) => {
     setInstaDiscoveryRunning(true)
     if (fresh) { setInstaDiscoveryLog([]); setInstaDiscoveryProgress(0) }
@@ -1241,6 +1256,9 @@ export default function Dashboard({ API, onSelect }) {
               <button onClick={() => { setDiscoveryOpen(true) }} style={btnStyle("linear-gradient(135deg,#1a0a2e,#0d1a2e)", `1px solid ${discoveryRunning ? "#6633ffaa" : "#6633ff44"}`, "#aa66ff", { fontWeight: 700, letterSpacing: "0.02em", position: "relative" })}>
                 {discoveryRunning && <span style={{ position: "absolute", top: 5, right: 5, width: 6, height: 6, borderRadius: "50%", background: "#4caf50", animation: "pulse 1.5s infinite" }} />}
                 + Discovery
+              </button>
+              <button onClick={syncFromFile} style={btnStyle("#0a0a1a", "0.5px solid #6633ff44", "#7755cc")} title="Push the latest leads JSON to Supabase (no Spotify scan)">
+                Sync file
               </button>
               <button onClick={() => setInstaDiscoveryOpen(true)} style={btnStyle("linear-gradient(135deg,#1a0525,#2a0a1a)", `1px solid ${instaDiscoveryRunning ? "#cc44aaaa" : "#cc44aa44"}`, "#ee88dd", { fontWeight: 700, letterSpacing: "0.02em", position: "relative" })}>
                 {instaDiscoveryRunning && <span style={{ position: "absolute", top: 5, right: 5, width: 6, height: 6, borderRadius: "50%", background: "#4caf50", animation: "pulse 1.5s infinite" }} />}
