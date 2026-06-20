@@ -24,7 +24,8 @@ load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
-TARGET_LEADS  = 50
+TEST_MODE     = "--test" in sys.argv
+TARGET_LEADS  = 5 if TEST_MODE else 50
 MIN_FOLLOWERS = 300
 MAX_FOLLOWERS = 500_000
 
@@ -100,74 +101,74 @@ _BAD_IG_PATHS = {
 }
 
 # DuckDuckGo searches — CCTV-relevant business owners
-# NOTE: "linkedin" is NOT in these queries — DDG doesn't reliably index IG bio text.
-# LinkedIn is checked when we fetch the actual profile. Simpler queries = more handles.
+# IMPORTANT: DDG only indexes og:title (display name + handle) and a short og:description
+# snippet from Instagram pages — it does NOT index bio text.
+# Strategy: NO quoted exact phrases (too restrictive). Use unquoted keywords that would
+# appear in the username/display-name, PLUS inurl: to match handles directly.
 DDG_SEARCHES = [
-    # Gas station / fuel owners
-    'site:instagram.com "gas station owner" entrepreneur USA',
-    'site:instagram.com "gas station owner" entrepreneur UK',
-    'site:instagram.com "gas station owner" entrepreneur Canada',
-    'site:instagram.com "petrol station owner" entrepreneur Australia',
-    'site:instagram.com "petrol station owner" entrepreneur Dubai',
-    'site:instagram.com "fuel station owner" entrepreneur',
+    # Gas station / fuel — handle-based
+    'site:instagram.com inurl:gasstation owner ceo founder',
+    'site:instagram.com inurl:petrolstation owner founder',
+    'site:instagram.com inurl:fuelstation owner entrepreneur',
+    'site:instagram.com gasstation owner ceo founder USA',
+    'site:instagram.com petrolstation owner founder UK',
 
-    # Convenience / liquor store owners
-    'site:instagram.com "convenience store owner" entrepreneur USA',
-    'site:instagram.com "liquor store owner" entrepreneur USA',
-    'site:instagram.com "off licence owner" entrepreneur UK',
-    'site:instagram.com "corner store owner" entrepreneur USA',
+    # Convenience / liquor store
+    'site:instagram.com inurl:liquorstore owner founder',
+    'site:instagram.com inurl:conveniencestore owner ceo',
+    'site:instagram.com liquorstore owner entrepreneur USA',
+    'site:instagram.com cornerstore owner founder USA',
 
-    # Retail shop owners
-    'site:instagram.com "retail store owner" entrepreneur USA',
-    'site:instagram.com "retail store owner" entrepreneur UK',
-    'site:instagram.com "shop owner" entrepreneur founder USA',
-    'site:instagram.com "store owner" entrepreneur founder UK',
-    'site:instagram.com "boutique owner" entrepreneur founder USA',
+    # Retail / boutique
+    'site:instagram.com inurl:boutique owner ceo founder',
+    'site:instagram.com inurl:retailstore owner founder',
+    'site:instagram.com boutique owner ceo entrepreneur USA',
+    'site:instagram.com shopowner entrepreneur founder USA',
 
-    # Car dealer / auto business
-    'site:instagram.com "car dealership owner" entrepreneur USA',
-    'site:instagram.com "used car dealer" owner entrepreneur USA',
-    'site:instagram.com "car lot owner" entrepreneur USA',
-    'site:instagram.com "auto dealer" owner entrepreneur Canada',
-    'site:instagram.com "auto repair shop owner" entrepreneur USA',
+    # Car dealer / auto
+    'site:instagram.com inurl:cardealer owner founder',
+    'site:instagram.com inurl:autosales owner entrepreneur',
+    'site:instagram.com inurl:usedcars owner founder',
+    'site:instagram.com cardealer owner founder USA',
+    'site:instagram.com autorepair owner founder USA',
 
     # Warehouse / storage / logistics
-    'site:instagram.com "warehouse owner" entrepreneur USA',
-    'site:instagram.com "self storage owner" entrepreneur USA',
-    'site:instagram.com "storage facility owner" entrepreneur',
-    'site:instagram.com "logistics company owner" entrepreneur',
+    'site:instagram.com inurl:warehouse owner founder',
+    'site:instagram.com inurl:selfstorage owner ceo',
+    'site:instagram.com warehouse owner founder USA',
+    'site:instagram.com selfstorage owner entrepreneur USA',
 
     # Nightclub / bar / venue
-    'site:instagram.com "nightclub owner" entrepreneur USA',
-    'site:instagram.com "nightclub owner" entrepreneur UK',
-    'site:instagram.com "bar owner" founder entrepreneur USA',
-    'site:instagram.com "venue owner" founder entrepreneur USA',
-    'site:instagram.com "lounge owner" founder entrepreneur Dubai',
+    'site:instagram.com inurl:nightclub owner founder',
+    'site:instagram.com inurl:barowner founder entrepreneur',
+    'site:instagram.com nightclub owner founder USA',
+    'site:instagram.com nightclub owner founder UK',
+    'site:instagram.com lounge owner founder Dubai entrepreneur',
 
-    # Hotel / property
-    'site:instagram.com "hotel owner" entrepreneur USA',
-    'site:instagram.com "motel owner" entrepreneur USA',
-    'site:instagram.com "property manager" owner entrepreneur USA',
-    'site:instagram.com "airbnb host" properties owner entrepreneur',
+    # Hotel / property management
+    'site:instagram.com inurl:hotel owner founder',
+    'site:instagram.com hotel owner founder entrepreneur USA',
+    'site:instagram.com propertymanager owner founder USA',
+    'site:instagram.com inurl:propertymanagement owner ceo',
 
     # Construction / contracting
-    'site:instagram.com "general contractor" owner entrepreneur USA',
-    'site:instagram.com "construction company owner" entrepreneur USA',
-    'site:instagram.com "general contractor" owner entrepreneur UK',
+    'site:instagram.com inurl:contractor owner founder',
+    'site:instagram.com inurl:construction owner ceo',
+    'site:instagram.com contractor owner founder USA entrepreneur',
 
     # Pharmacy / jewelry
-    'site:instagram.com "pharmacy owner" entrepreneur USA',
-    'site:instagram.com "jewelry store owner" entrepreneur USA',
-    'site:instagram.com "jeweller" owner entrepreneur UK',
+    'site:instagram.com inurl:pharmacy owner founder',
+    'site:instagram.com inurl:jewelry owner founder',
+    'site:instagram.com jewelry owner founder USA entrepreneur',
+    'site:instagram.com jeweler owner entrepreneur UK',
 
     # UAE / Dubai market
-    'site:instagram.com "business owner" entrepreneur Dubai founder',
-    'site:instagram.com "store owner" entrepreneur Dubai UAE',
-    'site:instagram.com "gas station" owner entrepreneur UAE',
+    'site:instagram.com businessowner founder entrepreneur Dubai',
+    'site:instagram.com storeowner entrepreneur UAE Dubai',
 
-    # General security-conscious owner signals
-    'site:instagram.com "business owner" cctv security entrepreneur',
-    'site:instagram.com "small business owner" security entrepreneur USA',
+    # General — CCTV / security owner signals
+    'site:instagram.com cctv security owner entrepreneur business',
+    'site:instagram.com inurl:security owner founder entrepreneur',
 ]
 
 
@@ -438,6 +439,8 @@ def run():
     print("           nightclubs, hotels, parking, pharmacies, jewelry")
     print("  Filter:  LinkedIn in bio + owner signal + security business")
     print("  Regions: USA, Canada, UK, Australia, UAE/Dubai")
+    if TEST_MODE:
+        print("  MODE:    TEST (5 leads, relaxed filters, verbose output)")
     print(f"  Target:  {TARGET_LEADS} leads | Session: {session_id}")
     print("="*60)
 
@@ -449,8 +452,9 @@ def run():
     all_handles = []
     seen_handles = set(existing_handles)
 
-    print(f"\n  Searching Instagram ({len(DDG_SEARCHES)} queries — LinkedIn checked at profile fetch, not in query)...")
-    for i, query in enumerate(DDG_SEARCHES, 1):
+    queries = DDG_SEARCHES[:15] if TEST_MODE else DDG_SEARCHES
+    print(f"\n  Searching Instagram ({len(queries)} queries)...")
+    for i, query in enumerate(queries, 1):
         handles = ddg_search(query)
         new_count = 0
         for h in handles:
@@ -458,16 +462,21 @@ def run():
                 seen_handles.add(h)
                 all_handles.append(h)
                 new_count += 1
-        print(f"  [{i}/{len(DDG_SEARCHES)}] {new_count} new handles")
-        time.sleep(random.uniform(10, 18))
+        if TEST_MODE:
+            print(f"  [{i}/{len(queries)}] {new_count} new handles  ← {query[:70]}")
+        else:
+            print(f"  [{i}/{len(queries)}] {new_count} new handles")
+        time.sleep(random.uniform(6, 12) if TEST_MODE else random.uniform(10, 18))
 
     print(f"\n  Total unique handles to verify: {len(all_handles)}")
+    if TEST_MODE and all_handles:
+        print(f"  Handles found: {', '.join('@'+h for h in all_handles[:30])}")
     random.shuffle(all_handles)
 
     # ── Step 2: Verify each handle ──────────────────────────────────────────
     print(f"\n  Verifying profiles...")
     leads = []
-    skip_followers = skip_no_linkedin = skip_no_owner = skip_no_biz = skip_region = skip_private = 0
+    skip_followers = skip_no_linkedin = skip_no_owner = skip_no_biz = skip_region = skip_private = skip_no_profile = 0
     checked = 0
 
     for handle in all_handles:
@@ -478,6 +487,9 @@ def run():
         checked += 1
         profile = fetch_ig_profile(handle)
         if not profile:
+            skip_no_profile += 1
+            if TEST_MODE:
+                print(f"  @{handle} → SKIP: no profile (private/404/rate-limited)")
             time.sleep(1.5)
             continue
 
@@ -487,31 +499,49 @@ def run():
 
         if followers < MIN_FOLLOWERS or followers > MAX_FOLLOWERS:
             skip_followers += 1
+            if TEST_MODE:
+                print(f"  @{handle} → SKIP: followers={followers:,} (range {MIN_FOLLOWERS:,}–{MAX_FOLLOWERS:,})")
             time.sleep(0.4)
             continue
 
         if is_blocked_region(bio, name):
             skip_region += 1
+            if TEST_MODE:
+                print(f"  @{handle} → SKIP: blocked region — bio='{bio[:60]}'")
             time.sleep(0.4)
             continue
 
         if not has_linkedin(bio):
             skip_no_linkedin += 1
+            if TEST_MODE:
+                print(f"  @{handle} → SKIP: no LinkedIn in bio — bio='{bio[:80]}'")
             time.sleep(0.4)
             continue
 
         if not has_owner_signal(bio, name, handle):
             skip_no_owner += 1
+            if TEST_MODE:
+                print(f"  @{handle} → SKIP: no owner signal — bio='{bio[:80]}'")
             time.sleep(0.4)
             continue
 
-        if not has_security_relevant_business(bio, name, handle):
+        # In TEST MODE: skip the business-type filter so we can see what passes LinkedIn+owner
+        if not TEST_MODE and not has_security_relevant_business(bio, name, handle):
             skip_no_biz += 1
             time.sleep(0.4)
             continue
+        if TEST_MODE and not has_security_relevant_business(bio, name, handle):
+            skip_no_biz += 1
+            print(f"  @{handle} → PASS (biz filter relaxed in test): {followers:,} followers — bio='{bio[:80]}'")
+            # Still save in test mode even without biz match
+        else:
+            if TEST_MODE:
+                print(f"  @{handle} → PASS: {followers:,} followers — bio='{bio[:80]}'")
 
         if profile["is_private"] and not profile.get("email"):
             skip_private += 1
+            if TEST_MODE:
+                print(f"  @{handle} → SKIP: private account, no email")
             time.sleep(0.4)
             continue
 
@@ -530,11 +560,15 @@ def run():
 
     print(f"\n  Filter results:")
     print(f"    Checked                   : {checked}")
+    print(f"    No profile (404/private)  : {skip_no_profile}")
     print(f"    Followers out of range    : {skip_followers}")
     print(f"    Blocked region            : {skip_region}")
     print(f"    No LinkedIn in bio        : {skip_no_linkedin}")
     print(f"    No owner signal           : {skip_no_owner}")
-    print(f"    Wrong business type       : {skip_no_biz}")
+    if not TEST_MODE:
+        print(f"    Wrong business type       : {skip_no_biz}")
+    else:
+        print(f"    Wrong business type (info): {skip_no_biz} (filter relaxed in test mode)")
     print(f"    Private (no email)        : {skip_private}")
     print(f"    SAVED                     : {len(leads)}")
 
@@ -543,7 +577,7 @@ def run():
         print("\n" + "="*60)
         print(f"  Session {session_id} complete.")
         print("="*60 + "\n")
-        return
+        return  # "finished" is printed by __main__ after run() returns
 
     print(f"\n  {'Handle':<24} {'Followers':<11} {'Type':<20} {'Name'}")
     print("  " + "─"*70)
@@ -560,3 +594,4 @@ def run():
 
 if __name__ == "__main__":
     run()
+    print("=== Business Discovery finished ===")
