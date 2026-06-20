@@ -1979,6 +1979,81 @@ app.get('/api/content-discover/status', (req, res) => {
   res.json({ running: _contentDiscovery.running, progress: _contentDiscovery.progress, logLines: _contentDiscovery.log.length })
 })
 
+let _businessDiscovery = { running: false, py: null, log: [], progress: 0, clients: [], heartbeat: null }
+
+function businessDiscoveryBroadcast(obj) {
+  const line = JSON.stringify(obj) + "\n"
+  _businessDiscovery.clients = _businessDiscovery.clients.filter(r => !r.writableEnded)
+  _businessDiscovery.clients.forEach(r => { try { r.write(line) } catch {} })
+}
+
+app.post('/api/business-discover', (req, res) => {
+  res.setHeader('Content-Type', 'application/x-ndjson')
+  res.setHeader('Transfer-Encoding', 'chunked')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('X-Accel-Buffering', 'no')
+
+  try { res.write('{"ping":true}\n') } catch {}
+
+  if (_businessDiscovery.running) {
+    _businessDiscovery.log.forEach(obj => { try { res.write(JSON.stringify(obj) + "\n") } catch {} })
+    _businessDiscovery.clients.push(res)
+    req.on('close', () => { _businessDiscovery.clients = _businessDiscovery.clients.filter(r => r !== res) })
+    return
+  }
+
+  _businessDiscovery = { running: true, py: null, log: [], progress: 0, clients: [res], heartbeat: null }
+  _businessDiscovery.heartbeat = setInterval(() => businessDiscoveryBroadcast({ ping: true }), 20000)
+
+  const scriptPath = path.join(__dirname, '../discovery/business_discovery.py')
+  const py = spawn('python', [scriptPath, '--no-prompt'], { cwd: path.join(__dirname, '../discovery') })
+  _businessDiscovery.py = py
+
+  const emit = obj => { _businessDiscovery.log.push(obj); businessDiscoveryBroadcast(obj) }
+
+  let lineBuffer = ""
+  py.stdout.on('data', chunk => {
+    lineBuffer += chunk.toString()
+    const lines = lineBuffer.split('\n')
+    lineBuffer = lines.pop()
+    for (const line of lines) {
+      if (!line.trim()) continue
+      const logObj = { log: line }
+      if (line.includes('complete')) { logObj.progress = 100 }
+      emit(logObj)
+    }
+  })
+
+  py.stderr.on('data', chunk => {
+    for (const line of chunk.toString().split('\n')) {
+      if (line.trim()) emit({ log: `[err] ${line}` })
+    }
+  })
+
+  py.on('close', () => {
+    clearInterval(_businessDiscovery.heartbeat)
+    emit({ progress: 100, done: true, log: '=== Business Discovery finished ===' })
+    _businessDiscovery.running = false
+    _businessDiscovery.py = null
+    _businessDiscovery.clients.forEach(r => { try { r.end() } catch {} })
+    _businessDiscovery.clients = []
+  })
+
+  py.on('error', err => {
+    clearInterval(_businessDiscovery.heartbeat)
+    emit({ log: `ERROR: ${err.message}`, done: true })
+    _businessDiscovery.running = false
+    _businessDiscovery.clients.forEach(r => { try { r.end() } catch {} })
+    _businessDiscovery.clients = []
+  })
+
+  req.on('close', () => { _businessDiscovery.clients = _businessDiscovery.clients.filter(r => r !== res) })
+})
+
+app.get('/api/business-discover/status', (req, res) => {
+  res.json({ running: _businessDiscovery.running, progress: _businessDiscovery.progress, logLines: _businessDiscovery.log.length })
+})
+
 // GET /api/verify-status
 app.get('/api/verify-status', (req, res) => {
   res.json({

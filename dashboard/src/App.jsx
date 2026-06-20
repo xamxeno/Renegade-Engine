@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import Dashboard from "./pages/Dashboard"
 import ArtistDetail from "./pages/ArtistDetail"
 import VideoLeads from "./pages/VideoLeads"
+import BusinessOwners from "./pages/BusinessOwners"
 
 const API = (import.meta.env.VITE_API_URL || "http://localhost:4000").replace(/\/$/, "")
 const SECRET = "Third Door Isn't There"
@@ -39,6 +40,7 @@ export default function App() {
       <Header onNav={navigate} currentPage={page} />
       {page === "dashboard" && <Dashboard API={API} onSelect={(id) => navigate("artist", id)} />}
       {page === "video"     && <VideoLeads API={API} onSelect={(id) => navigate("artist", id)} />}
+      {page === "business"  && <BusinessOwners API={API} onSelect={(id) => navigate("artist", id)} />}
       {page === "artist"    && <ArtistDetail API={API} id={selectedId} onBack={() => navigate("dashboard")} />}
     </div>
   )
@@ -238,14 +240,14 @@ function Header({ onNav, currentPage }) {
         <span style={{ color: "#444", fontSize: 13 }}>/ Engine</span>
       </div>
       <nav style={{ display: "flex", gap: "0.25rem", marginLeft: "auto" }}>
-        {[["dashboard", "Music Leads"], ["video", "Video Leads"]].map(([p, label]) => (
+        {[["dashboard", "Music Leads"], ["video", "Video Leads"], ["business", "Business Owners"]].map(([p, label]) => (
           <button
             key={p}
             onClick={() => onNav(p)}
             style={{
               background: currentPage === p ? "#1a1a1a" : "transparent",
               border: "none",
-              color: currentPage === p ? (p === "video" ? "#00ccaa" : "#fff") : "#666",
+              color: currentPage === p ? (p === "video" ? "#00ccaa" : p === "business" ? "#4499ff" : "#fff") : "#666",
               padding: "6px 14px", borderRadius: 6, cursor: "pointer",
               fontSize: 13, fontWeight: currentPage === p ? 500 : 400
             }}
