@@ -99,71 +99,75 @@ _BAD_IG_PATHS = {
     'create', 'directory', 'challenge', 'share', 'reel',
 }
 
-# DuckDuckGo searches — CCTV-relevant business owners with LinkedIn
+# DuckDuckGo searches — CCTV-relevant business owners
+# NOTE: "linkedin" is NOT in these queries — DDG doesn't reliably index IG bio text.
+# LinkedIn is checked when we fetch the actual profile. Simpler queries = more handles.
 DDG_SEARCHES = [
-    # Gas station / petrol owners
-    'site:instagram.com "gas station owner" ("USA" OR "United States") "linkedin"',
-    'site:instagram.com "gas station owner" ("Canada" OR "UK" OR "Australia" OR "UAE") "linkedin"',
-    'site:instagram.com "petrol station owner" ("UK" OR "Australia" OR "UAE" OR "Dubai") "linkedin"',
-    'site:instagram.com "fuel station owner" ("USA" OR "Canada" OR "UK") "linkedin"',
-    'site:instagram.com "gas station" "owner" "entrepreneur" "linkedin"',
+    # Gas station / fuel owners
+    'site:instagram.com "gas station owner" entrepreneur USA',
+    'site:instagram.com "gas station owner" entrepreneur UK',
+    'site:instagram.com "gas station owner" entrepreneur Canada',
+    'site:instagram.com "petrol station owner" entrepreneur Australia',
+    'site:instagram.com "petrol station owner" entrepreneur Dubai',
+    'site:instagram.com "fuel station owner" entrepreneur',
 
-    # Retail / convenience store owners
-    'site:instagram.com "convenience store owner" ("USA" OR "United States") "linkedin"',
-    'site:instagram.com "retail store owner" ("USA" OR "UK" OR "Canada") "linkedin"',
-    'site:instagram.com "shop owner" "retail" ("USA" OR "UK" OR "Canada" OR "Australia") "linkedin"',
-    'site:instagram.com "liquor store owner" ("USA" OR "Canada") "linkedin"',
-    'site:instagram.com "off licence owner" OR "off-license owner" "UK" "linkedin"',
-    'site:instagram.com "boutique owner" ("USA" OR "UK" OR "Canada") "linkedin" "security"',
+    # Convenience / liquor store owners
+    'site:instagram.com "convenience store owner" entrepreneur USA',
+    'site:instagram.com "liquor store owner" entrepreneur USA',
+    'site:instagram.com "off licence owner" entrepreneur UK',
+    'site:instagram.com "corner store owner" entrepreneur USA',
 
-    # Car dealer / auto business owners
-    'site:instagram.com "car dealership owner" ("USA" OR "United States") "linkedin"',
-    'site:instagram.com "used car dealer" ("USA" OR "UK" OR "Canada") "linkedin"',
-    'site:instagram.com "auto dealer" "owner" ("USA" OR "Canada") "linkedin"',
-    'site:instagram.com "car lot owner" ("USA" OR "United States") "linkedin"',
-    'site:instagram.com "auto repair shop owner" ("USA" OR "UK" OR "Canada") "linkedin"',
+    # Retail shop owners
+    'site:instagram.com "retail store owner" entrepreneur USA',
+    'site:instagram.com "retail store owner" entrepreneur UK',
+    'site:instagram.com "shop owner" entrepreneur founder USA',
+    'site:instagram.com "store owner" entrepreneur founder UK',
+    'site:instagram.com "boutique owner" entrepreneur founder USA',
 
-    # Warehouse / storage / logistics owners
-    'site:instagram.com "warehouse owner" ("USA" OR "UK" OR "Canada" OR "Australia") "linkedin"',
-    'site:instagram.com "self storage owner" ("USA" OR "United States") "linkedin"',
-    'site:instagram.com "storage facility owner" ("USA" OR "UK" OR "Canada") "linkedin"',
-    'site:instagram.com "logistics company owner" ("USA" OR "UK" OR "UAE") "linkedin"',
+    # Car dealer / auto business
+    'site:instagram.com "car dealership owner" entrepreneur USA',
+    'site:instagram.com "used car dealer" owner entrepreneur USA',
+    'site:instagram.com "car lot owner" entrepreneur USA',
+    'site:instagram.com "auto dealer" owner entrepreneur Canada',
+    'site:instagram.com "auto repair shop owner" entrepreneur USA',
 
-    # Parking lot / garage owners
-    'site:instagram.com "parking lot owner" ("USA" OR "United States" OR "Canada") "linkedin"',
-    'site:instagram.com "car park owner" ("UK" OR "Australia") "linkedin"',
+    # Warehouse / storage / logistics
+    'site:instagram.com "warehouse owner" entrepreneur USA',
+    'site:instagram.com "self storage owner" entrepreneur USA',
+    'site:instagram.com "storage facility owner" entrepreneur',
+    'site:instagram.com "logistics company owner" entrepreneur',
 
-    # Nightclub / bar / venue owners
-    'site:instagram.com "nightclub owner" ("USA" OR "UK" OR "Canada" OR "Australia") "linkedin"',
-    'site:instagram.com "bar owner" ("USA" OR "United States") "linkedin" "founder"',
-    'site:instagram.com "venue owner" ("USA" OR "UK" OR "UAE" OR "Dubai") "linkedin"',
-    'site:instagram.com "lounge owner" ("USA" OR "UK" OR "Dubai" OR "UAE") "linkedin"',
+    # Nightclub / bar / venue
+    'site:instagram.com "nightclub owner" entrepreneur USA',
+    'site:instagram.com "nightclub owner" entrepreneur UK',
+    'site:instagram.com "bar owner" founder entrepreneur USA',
+    'site:instagram.com "venue owner" founder entrepreneur USA',
+    'site:instagram.com "lounge owner" founder entrepreneur Dubai',
 
-    # Hotel / motel / property owners
-    'site:instagram.com "hotel owner" ("USA" OR "UK" OR "Canada" OR "UAE") "linkedin"',
-    'site:instagram.com "motel owner" ("USA" OR "United States" OR "Australia") "linkedin"',
-    'site:instagram.com "property manager" "owner" ("USA" OR "UK" OR "Canada") "linkedin"',
-    'site:instagram.com "airbnb host" "properties" ("USA" OR "UK" OR "Canada") "linkedin"',
+    # Hotel / property
+    'site:instagram.com "hotel owner" entrepreneur USA',
+    'site:instagram.com "motel owner" entrepreneur USA',
+    'site:instagram.com "property manager" owner entrepreneur USA',
+    'site:instagram.com "airbnb host" properties owner entrepreneur',
 
     # Construction / contracting
-    'site:instagram.com "general contractor" "owner" ("USA" OR "United States") "linkedin"',
-    'site:instagram.com "construction company owner" ("USA" OR "UK" OR "Canada" OR "Australia") "linkedin"',
-    'site:instagram.com "contractor" "founder" ("USA" OR "UK" OR "UAE") "linkedin"',
+    'site:instagram.com "general contractor" owner entrepreneur USA',
+    'site:instagram.com "construction company owner" entrepreneur USA',
+    'site:instagram.com "general contractor" owner entrepreneur UK',
 
-    # Pharmacy / jewelry / high-value retail
-    'site:instagram.com "pharmacy owner" ("USA" OR "UK" OR "Canada" OR "Australia") "linkedin"',
-    'site:instagram.com "jewelry store owner" ("USA" OR "UK" OR "UAE" OR "Dubai") "linkedin"',
-    'site:instagram.com "jeweller" "owner" ("UK" OR "Australia" OR "Canada") "linkedin"',
+    # Pharmacy / jewelry
+    'site:instagram.com "pharmacy owner" entrepreneur USA',
+    'site:instagram.com "jewelry store owner" entrepreneur USA',
+    'site:instagram.com "jeweller" owner entrepreneur UK',
 
-    # UAE / Dubai — high-security business hubs
-    'site:instagram.com "business owner" ("Dubai" OR "UAE") "security" "linkedin"',
-    'site:instagram.com "entrepreneur" ("Dubai" OR "UAE" OR "Abu Dhabi") "owner" "linkedin" -"crypto" -"nft"',
-    'site:instagram.com ("gas station" OR "petrol" OR "retail" OR "warehouse") "owner" ("Dubai" OR "UAE") "linkedin"',
+    # UAE / Dubai market
+    'site:instagram.com "business owner" entrepreneur Dubai founder',
+    'site:instagram.com "store owner" entrepreneur Dubai UAE',
+    'site:instagram.com "gas station" owner entrepreneur UAE',
 
-    # General "security-conscious" owner signals
-    'site:instagram.com "business owner" "cctv" ("USA" OR "UK" OR "Canada" OR "Australia") "linkedin"',
-    'site:instagram.com "store owner" "security" ("USA" OR "UK" OR "Canada") "linkedin"',
-    'site:instagram.com "small business owner" ("USA" OR "UK") "security" "linkedin"',
+    # General security-conscious owner signals
+    'site:instagram.com "business owner" cctv security entrepreneur',
+    'site:instagram.com "small business owner" security entrepreneur USA',
 ]
 
 
@@ -445,7 +449,7 @@ def run():
     all_handles = []
     seen_handles = set(existing_handles)
 
-    print(f"\n  Searching Instagram ({len(DDG_SEARCHES)} queries — security-relevant businesses)...")
+    print(f"\n  Searching Instagram ({len(DDG_SEARCHES)} queries — LinkedIn checked at profile fetch, not in query)...")
     for i, query in enumerate(DDG_SEARCHES, 1):
         handles = ddg_search(query)
         new_count = 0
