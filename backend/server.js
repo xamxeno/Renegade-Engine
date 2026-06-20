@@ -245,8 +245,16 @@ app.get('/api/artists', async (req, res) => {
     if (min_score !== undefined && min_score !== '' && parseInt(min_score) > 0)
       query = query.gte('score', parseInt(min_score))
     if (platform)         query = query.eq('platform', platform)
-    // neq excludes NULLs in Postgres — explicitly keep NULL platform rows (old music leads)
-    if (exclude_platform) query = query.or(`platform.neq.${exclude_platform},platform.is.null`)
+    // exclude_platform accepts comma-separated values e.g. "creator,business"
+    // not.in.(v1,v2) in PostgREST, plus explicit null-keep since NOT IN excludes NULLs in Postgres
+    if (exclude_platform) {
+      const vals = exclude_platform.split(',').map(v => v.trim()).filter(Boolean)
+      if (vals.length === 1) {
+        query = query.or(`platform.neq.${vals[0]},platform.is.null`)
+      } else {
+        query = query.or(`platform.not.in.(${vals.join(',')}),platform.is.null`)
+      }
+    }
     if (search)     query = query.ilike('name', `%${search}%`)
     if (session_id)         query = query.eq('session_id', session_id)
     // neq alone excludes NULLs in PostgreSQL — explicitly include NULL rows for Past Leads

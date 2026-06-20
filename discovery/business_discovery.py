@@ -1,8 +1,10 @@
 """
-Renegade Records — Business Owner Discovery Engine v1
-Finds small business owners on Instagram who have LinkedIn in their bio.
-Targets: restaurants, cafes, gyms, retail, gas stations, institutes, farmhouses
+Renegade Records — Business Owner Discovery Engine v2
+Target: Business owners who would want online CCTV / remote surveillance.
+High-security-need businesses: gas stations, retail, warehouses, car dealers,
+pharmacies, parking lots, nightclubs, hotels, construction, convenience stores.
 Regions: USA, Canada, UK, Australia, UAE/Dubai
+Filters: LinkedIn in bio + owner signal + target business type
 Run: python business_discovery.py [--no-prompt]
 """
 import sys, subprocess
@@ -23,10 +25,10 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
 TARGET_LEADS  = 50
-MIN_FOLLOWERS = 500
+MIN_FOLLOWERS = 300
 MAX_FOLLOWERS = 500_000
 
-# Regions to block (not our target markets)
+# Regions to block
 BLOCKED_REGIONS = [
     "india","indian","pakistan","pakistani","hindi","bangladesh","bengali",
     "karachi","lahore","islamabad","mumbai","delhi","kolkata","bangalore",
@@ -39,12 +41,54 @@ BLOCKED_REGIONS = [
 OWNER_KEYWORDS = [
     "owner", "founder", "co-founder", "ceo", "proprietor",
     "entrepreneur", "established", "est.", "est ", "my business",
-    "my restaurant", "my cafe", "my gym", "my shop", "my store",
+    "director", "managing director", "md ", "operations",
 ]
 
 LINKEDIN_SIGNALS = [
-    "linkedin.com/", "linkedin.com", "linked.in/", "linkedin:", "linkedin -",
-    "linkedin |", "/ linkedin", "| linkedin", "my linkedin",
+    "linkedin.com/in/", "linkedin.com/", "linked.in/", "linkedin:",
+    "linkedin -", "linkedin |", "/ linkedin", "| linkedin",
+]
+
+# Business types that NEED security/CCTV surveillance
+# These keywords must appear in bio/name to confirm they're the right target
+SECURITY_NEED_KEYWORDS = [
+    # Fuel / gas
+    "gas station", "petrol station", "fuel station", "service station", "filling station",
+    "petrol", "fuel", "bp station", "shell station", "exxon", "chevron", "sunoco",
+    # Retail / shop
+    "retail", "store owner", "shop owner", "boutique", "merchandise", "clothing store",
+    "fashion store", "shoe store", "hardware store", "electronics store", "convenience store",
+    "corner store", "off licence", "liquor store", "off-license", "supermarket",
+    # Auto
+    "car dealership", "auto dealer", "car dealer", "used cars", "car lot", "auto sales",
+    "auto repair", "body shop", "mechanic shop", "tire shop", "auto parts",
+    # Warehouse / storage
+    "warehouse", "storage facility", "self storage", "self-storage", "storage unit",
+    "logistics", "distribution center", "fulfillment", "depot",
+    # Parking
+    "parking lot", "parking garage", "car park", "parking facility",
+    # Nightlife
+    "nightclub", "club owner", "bar owner", "lounge owner", "pub owner",
+    "strip club", "venue owner",
+    # Hotel / hospitality
+    "hotel owner", "motel owner", "hotel manager", "hospitality",
+    "airbnb host", "property manager", "property management",
+    # Construction / contracting
+    "construction", "contractor", "general contractor", "building company",
+    "construction company", "site manager",
+    # Pharmacy / medical
+    "pharmacy", "pharmacist", "chemist shop", "drugstore",
+    # Jewelry
+    "jeweler", "jewellery", "jewelry store", "gold shop",
+    # Restaurant at night / bar
+    "restaurant owner", "cafe owner", "coffee shop", "food business",
+    # Office / commercial property
+    "office building", "commercial property", "landlord", "real estate",
+    "property investor", "property developer",
+    # School / childcare
+    "school owner", "daycare owner", "nursery owner", "childcare",
+    # Bank-adjacent
+    "atm", "money exchange", "currency exchange", "pawn shop",
 ]
 
 # Instagram reserved paths — not user profiles
@@ -55,56 +99,71 @@ _BAD_IG_PATHS = {
     'create', 'directory', 'challenge', 'share', 'reel',
 }
 
-# DuckDuckGo searches — business owner profiles by type + region + linkedin signal
+# DuckDuckGo searches — CCTV-relevant business owners with LinkedIn
 DDG_SEARCHES = [
-    # Restaurant / cafe owners
-    'site:instagram.com "restaurant owner" ("USA" OR "United States") "linkedin"',
-    'site:instagram.com "restaurant owner" ("UK" OR "United Kingdom" OR "London") "linkedin"',
-    'site:instagram.com "restaurant owner" ("Canada" OR "Toronto" OR "Vancouver") "linkedin"',
-    'site:instagram.com "restaurant owner" ("Australia" OR "Sydney" OR "Melbourne") "linkedin"',
-    'site:instagram.com "restaurant owner" ("Dubai" OR "UAE" OR "Abu Dhabi") "linkedin"',
-    'site:instagram.com "cafe owner" ("USA" OR "UK" OR "Canada" OR "Australia") "linkedin"',
-    'site:instagram.com "coffee shop owner" ("USA" OR "UK" OR "Canada") "linkedin"',
-
-    # Gym / fitness studio owners
-    'site:instagram.com "gym owner" ("USA" OR "United States") "linkedin"',
-    'site:instagram.com "gym owner" ("UK" OR "Canada" OR "Australia" OR "Dubai") "linkedin"',
-    'site:instagram.com "fitness studio owner" ("USA" OR "UK" OR "Canada") "linkedin"',
-    'site:instagram.com "crossfit owner" OR "yoga studio owner" ("USA" OR "UK") "linkedin"',
-
-    # Retail / boutique owners
-    'site:instagram.com "boutique owner" ("USA" OR "United States") "linkedin"',
-    'site:instagram.com "boutique owner" ("UK" OR "Canada" OR "Australia") "linkedin"',
-    'site:instagram.com "retail store owner" ("USA" OR "UK" OR "Canada") "linkedin"',
-    'site:instagram.com "shop owner" ("USA" OR "United States") "linkedin" "founder"',
-    'site:instagram.com "store owner" ("UK" OR "United Kingdom") "linkedin" "founder"',
-
-    # Gas station / fuel / service station
+    # Gas station / petrol owners
     'site:instagram.com "gas station owner" ("USA" OR "United States") "linkedin"',
-    'site:instagram.com "petrol station owner" ("UK" OR "Australia") "linkedin"',
-    'site:instagram.com "fuel station owner" ("UAE" OR "Dubai" OR "Canada") "linkedin"',
+    'site:instagram.com "gas station owner" ("Canada" OR "UK" OR "Australia" OR "UAE") "linkedin"',
+    'site:instagram.com "petrol station owner" ("UK" OR "Australia" OR "UAE" OR "Dubai") "linkedin"',
+    'site:instagram.com "fuel station owner" ("USA" OR "Canada" OR "UK") "linkedin"',
+    'site:instagram.com "gas station" "owner" "entrepreneur" "linkedin"',
 
-    # Institute / academy / school
-    'site:instagram.com "academy founder" ("USA" OR "UK" OR "Canada") "linkedin"',
-    'site:instagram.com "institute founder" ("USA" OR "UK" OR "Australia") "linkedin"',
-    'site:instagram.com "school owner" ("USA" OR "UK" OR "Canada") "linkedin"',
-    'site:instagram.com "tutoring center owner" ("USA" OR "Canada") "linkedin"',
+    # Retail / convenience store owners
+    'site:instagram.com "convenience store owner" ("USA" OR "United States") "linkedin"',
+    'site:instagram.com "retail store owner" ("USA" OR "UK" OR "Canada") "linkedin"',
+    'site:instagram.com "shop owner" "retail" ("USA" OR "UK" OR "Canada" OR "Australia") "linkedin"',
+    'site:instagram.com "liquor store owner" ("USA" OR "Canada") "linkedin"',
+    'site:instagram.com "off licence owner" OR "off-license owner" "UK" "linkedin"',
+    'site:instagram.com "boutique owner" ("USA" OR "UK" OR "Canada") "linkedin" "security"',
 
-    # Farmhouse / ranch / agri-business
-    'site:instagram.com "farmhouse owner" ("USA" OR "Canada" OR "Australia") "linkedin"',
-    'site:instagram.com "farm owner" ("USA" OR "United States") "linkedin"',
-    'site:instagram.com "ranch owner" ("USA" OR "Canada" OR "Australia") "linkedin"',
+    # Car dealer / auto business owners
+    'site:instagram.com "car dealership owner" ("USA" OR "United States") "linkedin"',
+    'site:instagram.com "used car dealer" ("USA" OR "UK" OR "Canada") "linkedin"',
+    'site:instagram.com "auto dealer" "owner" ("USA" OR "Canada") "linkedin"',
+    'site:instagram.com "car lot owner" ("USA" OR "United States") "linkedin"',
+    'site:instagram.com "auto repair shop owner" ("USA" OR "UK" OR "Canada") "linkedin"',
 
-    # General small business owner
-    'site:instagram.com "small business owner" ("USA" OR "United States") "linkedin"',
-    'site:instagram.com "small business owner" ("UK" OR "Canada" OR "Australia") "linkedin"',
-    'site:instagram.com "entrepreneur" "founder" ("USA" OR "United States") "linkedin" -"crypto" -"nft"',
-    'site:instagram.com "entrepreneur" "founder" ("UK" OR "Canada" OR "Australia") "linkedin" -"crypto"',
+    # Warehouse / storage / logistics owners
+    'site:instagram.com "warehouse owner" ("USA" OR "UK" OR "Canada" OR "Australia") "linkedin"',
+    'site:instagram.com "self storage owner" ("USA" OR "United States") "linkedin"',
+    'site:instagram.com "storage facility owner" ("USA" OR "UK" OR "Canada") "linkedin"',
+    'site:instagram.com "logistics company owner" ("USA" OR "UK" OR "UAE") "linkedin"',
 
-    # UAE/Dubai market specifically
-    'site:instagram.com "business owner" ("Dubai" OR "UAE" OR "Abu Dhabi") "linkedin"',
-    'site:instagram.com "entrepreneur" ("Dubai" OR "UAE") "founder" "linkedin"',
-    'site:instagram.com "restaurant" OR "cafe" ("Dubai" OR "UAE") "owner" "linkedin"',
+    # Parking lot / garage owners
+    'site:instagram.com "parking lot owner" ("USA" OR "United States" OR "Canada") "linkedin"',
+    'site:instagram.com "car park owner" ("UK" OR "Australia") "linkedin"',
+
+    # Nightclub / bar / venue owners
+    'site:instagram.com "nightclub owner" ("USA" OR "UK" OR "Canada" OR "Australia") "linkedin"',
+    'site:instagram.com "bar owner" ("USA" OR "United States") "linkedin" "founder"',
+    'site:instagram.com "venue owner" ("USA" OR "UK" OR "UAE" OR "Dubai") "linkedin"',
+    'site:instagram.com "lounge owner" ("USA" OR "UK" OR "Dubai" OR "UAE") "linkedin"',
+
+    # Hotel / motel / property owners
+    'site:instagram.com "hotel owner" ("USA" OR "UK" OR "Canada" OR "UAE") "linkedin"',
+    'site:instagram.com "motel owner" ("USA" OR "United States" OR "Australia") "linkedin"',
+    'site:instagram.com "property manager" "owner" ("USA" OR "UK" OR "Canada") "linkedin"',
+    'site:instagram.com "airbnb host" "properties" ("USA" OR "UK" OR "Canada") "linkedin"',
+
+    # Construction / contracting
+    'site:instagram.com "general contractor" "owner" ("USA" OR "United States") "linkedin"',
+    'site:instagram.com "construction company owner" ("USA" OR "UK" OR "Canada" OR "Australia") "linkedin"',
+    'site:instagram.com "contractor" "founder" ("USA" OR "UK" OR "UAE") "linkedin"',
+
+    # Pharmacy / jewelry / high-value retail
+    'site:instagram.com "pharmacy owner" ("USA" OR "UK" OR "Canada" OR "Australia") "linkedin"',
+    'site:instagram.com "jewelry store owner" ("USA" OR "UK" OR "UAE" OR "Dubai") "linkedin"',
+    'site:instagram.com "jeweller" "owner" ("UK" OR "Australia" OR "Canada") "linkedin"',
+
+    # UAE / Dubai — high-security business hubs
+    'site:instagram.com "business owner" ("Dubai" OR "UAE") "security" "linkedin"',
+    'site:instagram.com "entrepreneur" ("Dubai" OR "UAE" OR "Abu Dhabi") "owner" "linkedin" -"crypto" -"nft"',
+    'site:instagram.com ("gas station" OR "petrol" OR "retail" OR "warehouse") "owner" ("Dubai" OR "UAE") "linkedin"',
+
+    # General "security-conscious" owner signals
+    'site:instagram.com "business owner" "cctv" ("USA" OR "UK" OR "Canada" OR "Australia") "linkedin"',
+    'site:instagram.com "store owner" "security" ("USA" OR "UK" OR "Canada") "linkedin"',
+    'site:instagram.com "small business owner" ("USA" OR "UK") "security" "linkedin"',
 ]
 
 
@@ -235,15 +294,21 @@ def fetch_ig_profile(handle):
 
 
 def has_linkedin(bio):
-    """Returns True if any LinkedIn signal found in bio."""
+    """True if LinkedIn is referenced in bio."""
     bio_lower = bio.lower()
     return any(sig in bio_lower for sig in LINKEDIN_SIGNALS)
 
 
 def has_owner_signal(bio, name, handle):
-    """Returns True if the profile looks like a business owner."""
+    """True if bio/name suggests this person is an owner or founder."""
     text = (bio + " " + name + " " + handle).lower()
     return any(kw in text for kw in OWNER_KEYWORDS)
+
+
+def has_security_relevant_business(bio, name, handle):
+    """True if they run a type of business that genuinely needs CCTV/remote surveillance."""
+    text = (bio + " " + name + " " + handle).lower()
+    return any(kw in text for kw in SECURITY_NEED_KEYWORDS)
 
 
 def is_blocked_region(bio, name):
@@ -252,51 +317,63 @@ def is_blocked_region(bio, name):
 
 
 def detect_business_type(bio, name, handle):
-    """Detect what type of business this owner runs."""
+    """Map the profile to the most specific CCTV-relevant business category."""
     text = (bio + " " + name + " " + handle).lower()
-    if any(k in text for k in ["restaurant", "food", "dining", "cuisine", "eatery", "diner"]):
-        return "restaurant"
-    if any(k in text for k in ["cafe", "coffee", "bakery", "pastry", "brunch"]):
-        return "cafe"
-    if any(k in text for k in ["gym", "fitness", "crossfit", "yoga", "pilates", "workout", "wellness", "health club"]):
-        return "gym"
-    if any(k in text for k in ["boutique", "fashion", "clothing", "apparel", "shoes", "jewel"]):
-        return "retail"
-    if any(k in text for k in ["retail", "shop", "store", "merchandise"]):
-        return "retail"
-    if any(k in text for k in ["gas station", "petrol", "fuel", "service station"]):
+    if any(k in text for k in ["gas station", "petrol station", "fuel station", "filling station", "petrol", "fuel"]):
         return "gas station"
-    if any(k in text for k in ["school", "academy", "institute", "college", "tutoring", "education", "training center"]):
-        return "institute"
-    if any(k in text for k in ["farm", "ranch", "farmhouse", "agri", "orchard", "vineyard"]):
-        return "farmhouse"
-    if any(k in text for k in ["salon", "barber", "spa", "beauty", "nail"]):
-        return "beauty"
-    if any(k in text for k in ["hotel", "motel", "airbnb", "hostel", "resort", "lodge"]):
-        return "hospitality"
+    if any(k in text for k in ["nightclub", "night club", "club owner", "bar owner", "lounge owner", "pub owner", "venue owner"]):
+        return "nightclub/bar"
+    if any(k in text for k in ["car dealership", "auto dealer", "car dealer", "used car", "car lot", "auto sales"]):
+        return "car dealership"
+    if any(k in text for k in ["auto repair", "body shop", "mechanic shop", "tire shop"]):
+        return "auto repair"
+    if any(k in text for k in ["warehouse", "storage facility", "self storage", "self-storage", "storage unit"]):
+        return "warehouse/storage"
+    if any(k in text for k in ["parking lot", "parking garage", "car park", "parking facility"]):
+        return "parking"
+    if any(k in text for k in ["hotel owner", "motel owner", "hotel manager", "hotel"]):
+        return "hotel"
+    if any(k in text for k in ["construction", "general contractor", "contractor", "building company"]):
+        return "construction"
+    if any(k in text for k in ["pharmacy", "pharmacist", "chemist", "drugstore"]):
+        return "pharmacy"
+    if any(k in text for k in ["jewel", "jewelry", "jewellery", "gold shop"]):
+        return "jewelry store"
+    if any(k in text for k in ["liquor store", "off licence", "off-license", "bottle shop"]):
+        return "liquor store"
+    if any(k in text for k in ["convenience store", "corner store", "supermarket"]):
+        return "convenience store"
+    if any(k in text for k in ["property manager", "property management", "landlord", "property investor", "airbnb"]):
+        return "property/real estate"
+    if any(k in text for k in ["retail", "boutique", "clothing store", "fashion store", "hardware"]):
+        return "retail"
+    if any(k in text for k in ["logistics", "distribution", "fulfillment", "depot"]):
+        return "logistics"
+    if any(k in text for k in ["restaurant", "dining", "eatery", "food business"]):
+        return "restaurant"
+    if any(k in text for k in ["cafe", "coffee shop", "bakery"]):
+        return "cafe"
     return "business"
 
 
 def get_existing_db_leads():
     """Fetch existing business platform_ids to avoid duplicates."""
     if not SUPABASE_URL or not SUPABASE_KEY:
-        return set(), set()
+        return set()
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
     try:
         r = requests.get(
             f"{SUPABASE_URL}/rest/v1/artists",
             headers=headers,
-            params={"select": "instagram,platform_id", "platform": "eq.business", "limit": 10000},
+            params={"select": "platform_id", "platform": "eq.business", "limit": 10000},
             timeout=15,
         )
         data = r.json()
         if not isinstance(data, list):
-            return set(), set()
-        handles = {a["instagram"].lower() for a in data if a.get("instagram")}
-        handles |= {a["platform_id"].lower() for a in data if a.get("platform_id")}
-        return handles, set()
+            return set()
+        return {a["platform_id"].lower() for a in data if a.get("platform_id")}
     except:
-        return set(), set()
+        return set()
 
 
 def save_to_supabase(leads, session_id):
@@ -325,7 +402,7 @@ def save_to_supabase(leads, session_id):
             "email":           a.get("email") or None,
             "needs":           a.get("business_type", "business"),
             "score":           0,
-            "score_reason":    "Business owner with LinkedIn in bio",
+            "score_reason":    "Business owner with LinkedIn — CCTV/security prospect",
             "contact_quality": "found" if a.get("email") else "none",
             "status":          "new",
             "session_id":      session_id,
@@ -352,22 +429,23 @@ def save_to_supabase(leads, session_id):
 def run():
     session_id = datetime.now().strftime("biz_%Y%m%d_%H%M")
     print("\n" + "="*60)
-    print("  RENEGADE RECORDS — Business Owner Discovery Engine v1")
-    print("  Targets: restaurants, cafes, gyms, retail, gas stations,")
-    print("           institutes, farmhouses — LinkedIn in bio only")
+    print("  RENEGADE — Business Owner Discovery (CCTV/Security) v2")
+    print("  Targets: gas stations, retail, car dealers, warehouses,")
+    print("           nightclubs, hotels, parking, pharmacies, jewelry")
+    print("  Filter:  LinkedIn in bio + owner signal + security business")
     print("  Regions: USA, Canada, UK, Australia, UAE/Dubai")
-    print(f"  Target: {TARGET_LEADS} leads | Session: {session_id}")
+    print(f"  Target:  {TARGET_LEADS} leads | Session: {session_id}")
     print("="*60)
 
     print("\n  Checking existing leads in Supabase...")
-    existing_handles, _ = get_existing_db_leads()
+    existing_handles = get_existing_db_leads()
     print(f"  Existing business leads in DB: {len(existing_handles)}")
 
     # ── Step 1: Collect IG handles from DDG searches ────────────────────────
     all_handles = []
     seen_handles = set(existing_handles)
 
-    print(f"\n  Searching Instagram for business owner profiles ({len(DDG_SEARCHES)} queries)...")
+    print(f"\n  Searching Instagram ({len(DDG_SEARCHES)} queries — security-relevant businesses)...")
     for i, query in enumerate(DDG_SEARCHES, 1):
         handles = ddg_search(query)
         new_count = 0
@@ -379,19 +457,21 @@ def run():
         print(f"  [{i}/{len(DDG_SEARCHES)}] {new_count} new handles")
         time.sleep(random.uniform(10, 18))
 
-    print(f"\n  Total unique new handles: {len(all_handles)}")
+    print(f"\n  Total unique handles to verify: {len(all_handles)}")
     random.shuffle(all_handles)
 
     # ── Step 2: Verify each handle ──────────────────────────────────────────
-    print(f"\n  Verifying profiles (checking LinkedIn + owner signals)...")
+    print(f"\n  Verifying profiles...")
     leads = []
-    skip_followers = skip_no_linkedin = skip_no_owner = skip_region = skip_private = 0
+    skip_followers = skip_no_linkedin = skip_no_owner = skip_no_biz = skip_region = skip_private = 0
+    checked = 0
 
-    for i, handle in enumerate(all_handles, 1):
+    for handle in all_handles:
         if len(leads) >= TARGET_LEADS:
             print(f"  Target of {TARGET_LEADS} leads reached — stopping")
             break
 
+        checked += 1
         profile = fetch_ig_profile(handle)
         if not profile:
             time.sleep(1.5)
@@ -421,6 +501,11 @@ def run():
             time.sleep(0.4)
             continue
 
+        if not has_security_relevant_business(bio, name, handle):
+            skip_no_biz += 1
+            time.sleep(0.4)
+            continue
+
         if profile["is_private"] and not profile.get("email"):
             skip_private += 1
             time.sleep(0.4)
@@ -436,30 +521,30 @@ def run():
             "email":         profile.get("email", ""),
             "business_type": btype,
         })
-        print(f"  [{i}/{len(all_handles)}] @{handle} — {name} — {followers:,} — {btype} — SAVED ({len(leads)}/{TARGET_LEADS})")
+        print(f"  @{handle} — {name} — {followers:,} — {btype} — SAVED ({len(leads)}/{TARGET_LEADS})")
         time.sleep(0.8)
 
     print(f"\n  Filter results:")
-    print(f"    Checked               : {min(i, len(all_handles))}")
-    print(f"    Followers out of range: {skip_followers}")
-    print(f"    Blocked region        : {skip_region}")
-    print(f"    No LinkedIn in bio    : {skip_no_linkedin}")
-    print(f"    No owner signals      : {skip_no_owner}")
-    print(f"    Private (no email)    : {skip_private}")
-    print(f"    SAVED                 : {len(leads)}")
+    print(f"    Checked                   : {checked}")
+    print(f"    Followers out of range    : {skip_followers}")
+    print(f"    Blocked region            : {skip_region}")
+    print(f"    No LinkedIn in bio        : {skip_no_linkedin}")
+    print(f"    No owner signal           : {skip_no_owner}")
+    print(f"    Wrong business type       : {skip_no_biz}")
+    print(f"    Private (no email)        : {skip_private}")
+    print(f"    SAVED                     : {len(leads)}")
 
     if not leads:
-        print("\n  No business owner leads found. DDG results vary — try again.")
+        print("\n  No leads found. DDG results vary — try again in a few hours.")
         print("\n" + "="*60)
         print(f"  Session {session_id} complete.")
         print("="*60 + "\n")
         return
 
-    # ── Step 3: Save ────────────────────────────────────────────────────────
-    print(f"\n  {'Handle':<25} {'Followers':<12} {'Type':<14} {'Name'}")
-    print("  " + "─"*65)
-    for a in leads[:20]:
-        print(f"  @{a['handle']:<24} {a['followers']:>8,}    {a['business_type']:<14} {a['name']}")
+    print(f"\n  {'Handle':<24} {'Followers':<11} {'Type':<20} {'Name'}")
+    print("  " + "─"*70)
+    for a in leads[:25]:
+        print(f"  @{a['handle']:<23} {a['followers']:>8,}   {a['business_type']:<20} {a['name']}")
 
     save_to_supabase(leads, session_id)
 

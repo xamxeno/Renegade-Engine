@@ -9,16 +9,24 @@ const STATUS_COLORS = {
 }
 
 const TYPE_COLORS = {
-  restaurant:   "#ff6b35",
-  cafe:         "#c8935a",
-  gym:          "#4caf50",
-  retail:       "#2196f3",
-  "gas station":"#ffc107",
-  institute:    "#9c27b0",
-  farmhouse:    "#8bc34a",
-  beauty:       "#e91e63",
-  hospitality:  "#00bcd4",
-  business:     "#607d8b",
+  "gas station":        "#ffc107",
+  "nightclub/bar":      "#e91e63",
+  "car dealership":     "#2196f3",
+  "auto repair":        "#64b5f6",
+  "warehouse/storage":  "#ff9800",
+  "parking":            "#9e9e9e",
+  "hotel":              "#00bcd4",
+  "construction":       "#ff7043",
+  "pharmacy":           "#4caf50",
+  "jewelry store":      "#ffd700",
+  "liquor store":       "#ab47bc",
+  "convenience store":  "#ef5350",
+  "property/real estate":"#26a69a",
+  "retail":             "#42a5f5",
+  "logistics":          "#8d6e63",
+  "restaurant":         "#ff6b35",
+  "cafe":               "#c8935a",
+  "business":           "#607d8b",
 }
 
 export default function BusinessOwners({ API, onSelect }) {
@@ -49,6 +57,7 @@ export default function BusinessOwners({ API, onSelect }) {
     try {
       const params = new URLSearchParams()
       params.set("platform", "business")
+      params.set("max_followers", "500000")
       if (filterStatus)  params.set("status", filterStatus)
       if (filterSession) params.set("session_id", filterSession)
       if (search)        params.set("search", search)
@@ -210,7 +219,7 @@ export default function BusinessOwners({ API, onSelect }) {
             Business Owners
           </h1>
           <p style={{ color: "#555", fontSize: 13, margin: "4px 0 0" }}>
-            Instagram business owners with LinkedIn · restaurants, gyms, retail, and more
+            CCTV/security prospects — gas stations, retail, car dealers, warehouses, nightclubs, hotels
           </p>
         </div>
         <button
@@ -416,7 +425,7 @@ export default function BusinessOwners({ API, onSelect }) {
               <div>
                 <div style={{ color: "#fff", fontWeight: 700, fontSize: 17 }}>Business Owner Discovery</div>
                 <div style={{ color: "#555", fontSize: 12, marginTop: 3 }}>
-                  Searching Instagram for business owners with LinkedIn · 33 queries across 5 regions
+                  Targets security-relevant businesses with LinkedIn · 41 queries across 5 regions
                 </div>
               </div>
               {!discoveryRunning && (

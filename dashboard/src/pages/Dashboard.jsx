@@ -89,7 +89,7 @@ export default function Dashboard({ API, onSelect }) {
       if (filterSession) params.set("session_id", filterSession)
 
       if (filterPlatform) params.set("platform", filterPlatform)
-      else params.set("exclude_platform", "creator")
+      else params.set("exclude_platform", "creator,business")
       const [ar, st] = await Promise.all([
         fetch(`${API}/api/artists?${params}`).then(r => r.json()),
         fetch(`${API}/api/stats`).then(r => r.json())
